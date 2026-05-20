@@ -1,0 +1,63 @@
+Refer to this document when the execution stack breaks and you lose track of
+where you are in the memory initialization sequence.
+
+
+1. Environment & Bootstrapping: Escaping the BIOS
+        We use the Limine bootloader (modern open-source bootloader designed mainly for hobby OS development) to handle the ugly firmware initialization.
+        Limine forces the CPU into 64-bit Long Mode, establishes a flat stack, and jumps directly into our C entry point (`kernel_main`).
+
+2. Hardware Tables (GDT & IDT): Taking Control of the CPU
+        Before we can trust the CPU to run complex logic, we must configure its core
+        execution tables manually.
+        • GDT (Global Descriptor Table): Defines flat 64-bit code and data segments.
+        • IDT (Interrupt Descriptor Table): Maps hardware events and CPU exceptions
+          (e.g., Divide-by-Zero, Page Faults) to specific C handlers. If this is broken,
+          the hardware triple-faults and reboots instantly.
+
+3. Memory Management (PMM & VMM): The Foundation
+        Memory abstraction is the absolute core of this project. It is built in three
+        distinct, non-negotiable layers:
+        • PMM (Physical Memory Manager): A primitive page bitmap allocator tracking
+          which 4KB blocks of raw RAM are physically occupied.
+        • VMM (Virtual Memory Manager): C logic manipulating x86_64 4-level page tables
+          (PML4, PDPT, PD, PT) to map arbitrary virtual spaces.
+        • Heap Allocator: Implementation of `kmalloc()` and `kfree()` to allow the
+          kernel to handle dynamic data structures.
+
+4. Interrupts & Multitasking: The Research Phase
+        We transition the system from a single execution thread into a true concurrent
+        kernel.
+        • Timer: Configure the APIC (Advanced Programmable Interrupt Controller)
+          timer to yield execution every few milliseconds.
+        • Context Switch: Hardcore Assembly routines to push current CPU registers
+          onto the stack, swap stack pointers, and pop the state of the next task.
+        • Scheduling: Implementation of a custom scheduling algorithm. No generic
+          Round-Robin; code a lean scheduler optimized for bare-metal execution.
+ (im planning to design a new scheduling algo lol!)
+
+5. The User Space Transition: Dropping to Ring 3
+        Running user applications inside the kernel (Ring 0) is garbage design. A single
+        application bug will crash the entire machine.
+        • TSS (Task State Segment): Hardwired CPU structure required to hold the
+          kernel stack pointer during privilege shifts.
+        • Privilege Drop: Use the `STAR`/`LSTAR` MSRs and the `sysret` instruction
+          to safely drop the CPU's privilege level into Ring 3.
+        • Syscalls: Implement an explicit `syscall` handler interface so untrusted
+          Ring 3 binaries can safely request execution services from the kernel.
+
+
+6.The VFS & ELF Loader: Running Real Programs.
+        To run arbitrary user binaries, the system must abstract storage and understand
+        standard executable layouts.
+        • VFS (Virtual File System): A unified abstraction layer over raw storage.
+          Backed by a clean TarFS or basic ext2 read-only implementation.
+        • ELF Parser: Reads compiled ELF64 binaries from disk, parses program headers,
+          allocates fresh virtual memory pages, copies code segments, and jumps straight
+          to the entry offset.
+
+7.The User Interface: The Shell.
+        Once Ring 3 and storage work, the kernel's core initialization is complete.
+        • The Init Process: The kernel spawns a single, standalone mini-shell as
+          Process ID 1.
+        • The Interface: A pure command-line environment communicating directly over
+          serial or a raw frame-buffer terminal. No windows. No bloat. Just the metal.
