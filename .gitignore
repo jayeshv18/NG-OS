@@ -1,0 +1,50 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables & Kernels
+*.exe
+*.out
+*.app
+*.elf
+*.bin
+
+# Disk Images (Crucial to ignore these, they get massive)
+*.iso
+*.img
+*.vdi
+*.vmdk
+
+# Build and Staging Directories
+build/
+iso_root/
+
+# Third-party Bootloaders
+limine/
+
+# CLion / JetBrains IDE Files
+.idea/
+cmake-build-*/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
