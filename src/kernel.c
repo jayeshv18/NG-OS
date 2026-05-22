@@ -1,7 +1,5 @@
 #include "include/serial.h"
-#include "include/limine.h" // the bootloader
 #include <stdint.h>  // Gives us uint64_t
-#include <stdbool.h> // Gives us true/false
 #include <stddef.h> // We need this for the NULL pointer definition
 
 /*
@@ -9,12 +7,6 @@
 * The 'used' attribute prevents the compiler from optimizing away or deleting this variable as dead code.
 'volatile' tells the compiler that the bootloader will modify this data outside of our C code's awareness.
  */
-// __attribute__((used)) forces GCC to keep this in the final binary.
-__attribute__((aligned(8)))
-volatile struct limine_framebuffer_request framebuffer_request = {
-    .id = LIMINE_FRAMEBUFFER_REQUEST,
-    .revision = 0
-};
 
 
 /*
@@ -25,16 +17,7 @@ volatile struct limine_framebuffer_request framebuffer_request = {
  *The CPU will panic and triple-fault.
  */
 void kernel_main(void) {
-    if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {// Limine modifies base_revision[2] during boot. If it is 0, we are unsupported.
-        for (;;) { //if the bootloader is too old or doesn't support, we cant safely boot, we use infinite loop to put CPu on halt and prevent crash.
-            __asm__ volatile ("hlt");
-        }
-    }
-    // if it is true then the kernel is alive and welcome.
-    struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     serial_print("Welcome to NG-OS:)\n");
-    serial_print("Framebuffer successfully acquired!\n");
-
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
      *which securely cleans up the memory and closes the process. Since we are writing the operating system itself, there is nothing left to return to.
