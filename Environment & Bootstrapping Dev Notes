@@ -1,0 +1,276 @@
+This is my notes and everyhting here is gonna be casually written so that, i can refer this anytime, also you too haha.
+
+1. Environment & Bootstrapping: Escaping the BIOS
+        We use the Limine bootloader (modern open-source bootloader designed mainly for hobby OS development) to handle the ugly firmware initialization.
+        Limine forces the CPU into 64-bit Long Mode, establishes a flat stack, and jumps directly into our C entry point (`kernel_main`).
+
+• Limine is a modern open-source bootloader designed mainly for hobby OS development, kernel experimentation, and modern low-level systems work.
+
+-> What a Bootloader Actually Does:
+    When you press the power button:
+
+    1. CPU resets
+    2. Firmware starts:
+    •   BIOS (old)
+    •   UEFI (modern)
+    3. Firmware loads a bootloader
+    4. Bootloader loads the kernel into memory
+    5. Bootloader prepares hardware/environment
+    6. Control jumps to kernel entry point
+
+   bootloader is basically, The bridge between firmware and operating system.
+
+   Limine is native 64 bit booting and also less complexity and it handles all on its own.
+   older systems were crap, 32 bit focus, messy transitions, legacy constraints.
+
+-> Limine Boot Flow:
+                Power On
+                   ↓
+            BIOS/UEFI firmware
+                   ↓
+         Limine bootloader loaded
+                   ↓
+     Limine reads config + filesystem
+                   ↓
+        Limine loads kernel ELF
+                   ↓
+       Limine sets up environment
+                   ↓
+    Paging / framebuffer / memory map
+                   ↓
+       Jump to kernel entry point
+
+• The kernel is usually compiled as an: Executable and Linkable Format executable.
+
+•Limine:
+   1. parses ELF headers
+   2. loads sections into correct memory locations
+   3. handles relocations if needed
+   4. maps segments properly
+   5. jumps to kernel entry point
+
+• Comparison:
+   | Feature              | Limine    | GRUB      |
+   | -------------------- | --------- | --------- |
+   | Modern 64-bit focus  | Yes       | Partial   |
+   | Higher-half support  | Excellent | Clunky    |
+   | Simplicity for OSDev | Excellent | Medium    |
+   | BIOS + UEFI          | Yes       | Yes       |
+   | SMP support          | Good      | Limited   |
+   | Clean protocol       | Yes       | Old-style |
+   | Config complexity    | Lower     | Higher    |
+   | Legacy baggage       | Low       | High      |
+
+• Real production OSes dont use Limine, they have their custom bootloaders. So later we'll make ur own but for now we are gonna use Limine to reduce the pain.
+
+-> What does "Limine forces the CPU into 64-bit Long Mode” actually mean?
+•Limine performs all the painful low-level CPU setup required to switch the processor from the firmware’s startup state into modern 64-bit execution mode before your kernel begins.
+•When an x86 computer powers on, the CPU starts in a very ancient compatibility state inherited from the 1970s/80s:
+       CPU reset
+           ↓
+     16-bit Real Mode
+
+• Real mode has:
+        16-bit registers
+        1 MB memory limit
+        segmented memory
+        no paging
+        no memory protection
+        no privilege separation
+
+Basically DOS-era execution, We CANNOT run a modern kernel properly there.
+
+•Modern x86_64 kernels run in:
+    64-bit Long Mode
+    This enables:
+            64-bit registers
+            64-bit addressing
+            paging
+            virtual memory
+            modern instruction set
+            higher-half kernels
+            large memory support
+    Without long mode, we don have 16 bit environment.
+
+• Limine performs the ugly transition chain:
+       Real Mode
+           ↓
+      Protected Mode
+           ↓
+      Paging Setup
+           ↓
+       PAE Enable
+           ↓
+    Long Mode Enable
+           ↓
+   64-bit Kernel Entry
+
+This involves manipulating:
+    control registers
+    page tables
+    GDT
+    MSRs
+    paging flags
+
+-> To enter Long Mode manually, we must:
+    1. Build a GDT (Global Descriptor Table):
+    defines memory segments and privilege setup.
+    Even though segmentation is mostly disabled in 64-bit mode, you STILL need a valid GDT to enter Long Mode.
+
+    2. Enable Protected Mode:
+    CPU starts in Real Mode.
+    must set: CR0.PE
+
+    to enter:
+        Protected Mode
+    This enables:
+        32-bit execution
+        protected memory model
+
+    3. Enable PAE:
+    must enable:
+        Physical Address Extension
+    by setting:
+        CR4.PAE
+    Long Mode REQUIRES PAE paging structures.
+
+    4. Create Page Tables:
+    64-bit mode REQUIRES paging.
+    must create:
+        PML4
+        PDPT
+        PD
+        PT
+     "hierarchy."
+    Modern x86_64 memory translation depends entirely on this.
+
+    5. Enable Long Mode Bit:
+    You must write to a special MSR:
+        IA32_EFER
+    and set:
+        LME = Long Mode Enable
+    using instructions like:
+        rdmsr
+        wrmsr
+
+    6. Enable Paging
+    Set:
+        CR0.PG
+    Now paging activates.
+    At THIS point:
+       the CPU is technically ready for Long Mode.
+
+    7. Far Jump Into 64-bit Code Segment
+    Finally:
+    you must perform a special jump to reload CS:
+        jmp 64bit_code_segment:start64
+    Only NOW does the CPU begin executing:
+        actual 64-bit instructions.
+
+(THIS ISNT BEGINNER FRIENDLY BTW)
+
+-> Visual Summary
+        Power On
+           ↓
+     16-bit Real Mode
+           ↓
+     Limine executes
+           ↓
+       Build GDT
+           ↓
+  Enable Protected Mode
+           ↓
+      Setup Paging
+           ↓
+    Enable Long Mode
+           ↓
+      Setup Stack
+           ↓
+  Jump to kernel_main()
+           ↓
+  Your 64-bit kernel runs
+
+
+-> What Actually Happens on Boot
+   When an x86 CPU resets:
+
+      CPU Reset
+          ↓
+      Real Mode
+          ↓
+   Firmware executes
+          ↓
+  Bootloader executes
+          ↓
+Switch to Protected Mode
+          ↓
+  Switch to Long Mode
+          ↓
+    Kernel starts
+
+• Even on a modern CPUs, the reset state is still basically legacy x86 startup behavior.
+• X86 still do this because of "Backward Compatibility", "Old software should still boot"
+
+-> Protected Mode vs Long Mode:
+    Protected Mode (32-bit)(by Intel):
+    Adds:
+       • memory protection
+       • privilege rings
+       • multitasking support
+       • 32-bit addressing
+
+    Long Mode (64-bit)(by AMD):
+    Adds:
+    • 64-bit registers
+    • modern paging
+    • large virtual memory
+    • cleaner execution model
+
+-> You CANNOT Jump Directly From Real Mode to Long Mode:
+•You must pass through intermediate setup stages:
+    Protected Mode
+    paging setup
+    PAE
+    MSR configuration
+before Long Mode activates.
+
+-> BIOS vs UEFI:
+    BIOS Path:
+        Real Mode
+           ↓
+          BIOS
+           ↓
+       Bootloader
+           ↓
+     Protected Mode
+           ↓
+       Long Mode
+
+   UEFI Path:
+           Real Mode
+              ↓
+         UEFI firmware
+              ↓
+ UEFI internally sets modern state
+              ↓
+          Bootloader
+              ↓
+            Kernel
+
+• UEFI often already executes in:
+    32-bit
+    or
+    64-bit mode
+which simplifies bootloader work.
+
+-> The CPU has multiple cores, and each core can execute independently but on boot only ONE core starts automatically. This is called BSP (Bootstrap Processor),
+the other cores are inactive/asleep called as AP (Application Processors).
+Then later the kernel wakes all and assigns the cores with processes.
+the kernel must:
+    detect AP cores
+    initialize them
+    give them stacks
+    switch them into Long Mode
+    synchronize startup
+This process is: SMP initialization
+•
