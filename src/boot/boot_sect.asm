@@ -14,6 +14,7 @@
 
 bits 16 ;When NASM translates text into binary, t needs to know what era of CPU it's targeting. Since the BIOS wakes the computer up in Real Mode (16 bit)
 ; org stands for where exactly our code will be loaded.
+;The BIOS int 0x13 interrupt uses the CPU stack internally. If we don't explicitly define where the stack is, the BIOS might use random memory and overwrite our bootloader, causing a crash.
 org 0x7c00 ;The BIOS always loads us at exactly 0x7C00, we create a variable, NASM needs to know where in RAM this code will physically live so it can calculate the pointer.
 
 ;reading the disk requires more coordination than printing text, gotta setup a stack so that int 0x13 doesnt overwrite our code.
