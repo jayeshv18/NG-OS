@@ -16,6 +16,12 @@ bits 16 ;When NASM translates text into binary, t needs to know what era of CPU 
 ; org stands for where exactly our code will be loaded.
 org 0x7c00 ;The BIOS always loads us at exactly 0x7C00, we create a variable, NASM needs to know where in RAM this code will physically live so it can calculate the pointer.
 
+;reading the disk requires more coordination than printing text, gotta setup a stack so that int 0x13 doesnt overwrite our code.
+;we have to load six different registers with coordinates, execute the interrupt, and jump to the newly loaded code.
+;this about it, you cant fit all in one sector, so we broke the bootloader into parts and now these parts are to be connected using jmp while executing so that the bootloader is complete.
+mov bp,0x7c00 ;Base point of the stack
+mov sp,bp ; initially it'll hold the base pointer valuse and then it'll grow
+
 ;if we try to print something after main the cpu will get stuck in an infite loop and never reach our instruction..so, must put before.
 ;we dont have any print or any functions here, so to print a character in 16bit realmode, we have to load specific values into the CPU registers, to tell the BIOS what to do.
 ; BIOS contains pre-written basic utility programs stored directly on its chip. "0x10" is slot for video graphics and text display.
@@ -33,12 +39,36 @@ print_loop:
 ;also it automatically increments SI by 1, so it's pointing at the next character.
 lodsb
 cmp al,0 ;did we just load the null terminator?
-je main ;if yes, we are done printing. Jump to the infinite loop aka main.
+je load_disk ;if yes, we are done printing. Jump to the load_disk
 int 0x10 ;int 0x10, trigger. This executes the BIOS code.
 jmp print_loop;jump back to the top of the loop to get the next letter!
 
+;BIOS disk reading
+;Memory and Loops are 0-indexed (they start counting at 0).Disk Sectors are 1-indexed (they start counting at 1).
+;sector 2 is the very next to sector 1 where stage 1 is stored.
+
+;bootloader is the absolute first thing written onto the drive, it sits at the very beginning of the hardware: Cylinder 0, Head 0, Sector 1 (Stage 1),
+;followed immediately by Cylinder 0, Head 0, Sector 2 (Stage 2).
+
+load_disk:
+mov ah, 0x02 ;reading the next sector ie the next stage of the boot
+mov al, 15 ;number 15 tells the BIOS exactly how many sectors (blocks of 512 bytes) to grab from the disk in one single scoop.
+;15 because your Stage 2 code is too big to fit in one 512-byte sector, but it easily fits within 7.5 KB. You are telling the BIOS: "Go to Sector 2, grab the next 15 sectors in a row, and load them all into memory for me."
+;if youre bored or not able to understand then think about me :(
+mov ch, 0 ;cyclinder 0. Hard-drives follow CHS mapping(cyclinder,head,sector).
+mov dh, 0 ;head 0
+mov cl, 2 ; start reading from second sector because the first is already done... i hope you get it, try to connect the dots.
+mov bx, 0x9000 ;RAM dest for stage 2
+int 0x13 ;execute the read disk.
+
 main: ;We need to create a label (main: ) and instruct CPU to jump back to that position forever so that it doesnt fall of the 512 and execute garbage.
-jmp main ;The CPU will jump exactly to wherever 'main' is located
+jmp 0x9000      ; Jump to the code we just loaded.
+;there is important thing to realize, the BIOS will copy the first sector to 0x7c00 and execute then later we have the whole RAM free,
+;we cant tightly pack it next to each other because the CPU mmu is physically 4kb, as grid.
+
+;now the bios doesnt know where to cpy the next instruction, so we instruct it.
+;setting mov bx, 0x9000, we are handing the BIOS a container and saying: "Go to the disk, grab those 15 sectors, and copy them exactly into RAM address 0x9000.
+;When we write our separate Stage 2 assembly file, "org 0x9000" will tell the assembler Stage 2 will live at 0x9000
 
 ;DATA SECTION
 ;we define our string here in memory, ending with a 0.
