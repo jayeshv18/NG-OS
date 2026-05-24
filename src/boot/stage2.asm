@@ -1,5 +1,12 @@
+section .text ;This tells the linker where the executable code is.
+extern kernel_main ;extern stands for External, logic: kernel_main is present in kernel.c so leave memory for it and execute.
 bits 16 ;we are still in 16 bit mode
-org 0x9000 ;where the code exactly will be present based on previous file/sector
+;testing update: passing stage2.asm to the linker needs to be compiled with the kernel as a structured object file (ELF32), not raw binary.
+;So we have to remove the line org 0x9000 because ELF files don't use org. The linker script handles the memory address now.
+;but i'll be commenting all the old instructions so that it makes eaiser to learn & refer.
+
+;org 0x9000 ;where the code exactly will be present based on previous file/sector
+
 mov ah, 0x0e
 mov si, stage2_msg
 print_loop:
@@ -68,19 +75,22 @@ mov ebp, 0x90000 ;setting up a massive new 32-bit stack
 mov esp, ebp ;esp stands for Extended Stack Pointer
 ;when we start a brand-new stack, it must be completely empty. By making esp match ebp (0x90000), we are initializing the stack. The very next time we run a push instruction, esp will safely subtract memory from 0x90000 and store the data.
 
+;Code-Update until the next ----> , (note: this is a old code used for testing, its commented out and not deleted to make it suitable to learning and decoding.)
 ;as we are officially into 32 bit mode,
 ;In 16-bit mode, we could ask the BIOS to print letters for us using int 0x10.
 ;the moment we flipped cr0 to 1, we entered 32-bit Protected Mode. We instantly lost access to the BIOS. If we try to use int 0x10 to print a message to say "Hey!", the CPU will crash.
 ;we have to bypass the BIOS entirely and write data directly into the computer's physical VGA Video Memory.
-
 ;the motherboard physically maps the text display to the exact RAM address 0xB8000. It is a grid of memory. Every character on the screen takes up exactly two bytes in this grid.
 ;The first byte is the ASCII character (e.g., 'X'). The second byte is the color code (e.g., 0x0f for white text on a black background).
 ;To print the letter 'X' in the top-left corner of the screen, we don't call a function. We literally write two bytes directly to 0xB8000 and 0xB8001.
-mov ebx,0xB8000 ; ebx cause we are in 32 bit mode... obv, storing the address of the physical address 0xB8000 points straight to the memory chips inside your video card
-mov al,'D';the letter to print
-mov ah, 0x0f ; the color code( 0=black, f=white).
-mov [ebx],ax ; deliver the ax(al,ah) at the address of ebp ie VGA memory address to display on screen.
+;mov ebx,0xB8000 ; ebx cause we are in 32 bit mode... obv, storing the address of the physical address 0xB8000 points straight to the memory chips inside your video card
+;mov al,'D';the letter to print
+;mov ah, 0x0f ; the color code( 0=black, f=white).
+;mov [ebx],ax ; deliver the ax(al,ah) at the address of ebp ie VGA memory address to display on screen.
+;---->
 
+call kernel_main ;go to C code and run the kernel
+;We add a backup safety net here just in case the C code fails to save from crash
 jmp $ ;Jump to the exact line we are currently standing on. (infinite loop)
 
 
