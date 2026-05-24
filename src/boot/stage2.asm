@@ -67,7 +67,23 @@ mov ebp, 0x90000 ;setting up a massive new 32-bit stack
 ;on standard PCs, the memory region up to 0x9FFFF is completely free. Setting our stack base to 0x90000 guarantees that our stack has nearly 64 Kilobytes of clear RAM to grow downwards into without hitting your code.
 mov esp, ebp ;esp stands for Extended Stack Pointer
 ;when we start a brand-new stack, it must be completely empty. By making esp match ebp (0x90000), we are initializing the stack. The very next time we run a push instruction, esp will safely subtract memory from 0x90000 and store the data.
-jmp $ ;Jump to the exact line you are currently standing on. (infinite loop)
+
+;as we are officially into 32 bit mode,
+;In 16-bit mode, we could ask the BIOS to print letters for us using int 0x10.
+;the moment we flipped cr0 to 1, we entered 32-bit Protected Mode. We instantly lost access to the BIOS. If we try to use int 0x10 to print a message to say "Hey!", the CPU will crash.
+;we have to bypass the BIOS entirely and write data directly into the computer's physical VGA Video Memory.
+
+;the motherboard physically maps the text display to the exact RAM address 0xB8000. It is a grid of memory. Every character on the screen takes up exactly two bytes in this grid.
+;The first byte is the ASCII character (e.g., 'X'). The second byte is the color code (e.g., 0x0f for white text on a black background).
+;To print the letter 'X' in the top-left corner of the screen, we don't call a function. We literally write two bytes directly to 0xB8000 and 0xB8001.
+mov ebx,0xB8000 ; ebx cause we are in 32 bit mode... obv, storing the address of the physical address 0xB8000 points straight to the memory chips inside your video card
+mov al,'D';the letter to print
+mov ah, 0x0f ; the color code( 0=black, f=white).
+mov [ebx],ax ; deliver the ax(al,ah) at the address of ebp ie VGA memory address to display on screen.
+
+jmp $ ;Jump to the exact line we are currently standing on. (infinite loop)
+
+
 
 stage2_msg: db 'Stage 2 loaded lets go... excited btw :)',0
 ;We do NOT need the 512-byte padding or the 0xaa55 signature in this file. The BIOS only checks Sector 0 for that. Stage 2 can be any size
