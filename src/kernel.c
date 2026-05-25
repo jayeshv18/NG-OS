@@ -15,7 +15,7 @@ void kernel_main() {
     vga_buff[1]=0x0f;// Index [1] is the second byte, which sits right next to the character in memory.
     // The hex code 0x0F is split into two numbers: The first digit (0) tells the hardware to make the background pitch black.The second digit (F) tells the hardware to paint the letter 'K' in bright white.
     ---->*/
-
+    vga_clear_screen();
     vga_print("Hello from the NG-OS Kernel!\n");
     vga_print("System Initialized Successfully.\n");
 

@@ -10,6 +10,11 @@ bits 16 ;we are still in 16 bit mode
 xor ax, ax      ; Set AX to 0 quickly, xor ax, ax is the fastest, most efficient way to set a register to zero.
 mov ds, ax      ; Set Data Segment to 0
 mov es, ax      ; Set Extra Segment to 0
+; Clears segment registers to remove random garbage values left behind by the BIOS.
+; 'xor ax, ax' mathematically sets AX to 0 faster and with fewer bytes than 'mov ax, 0'.
+; We copy this 0 into DS and ES because 16-bit memory math multiplies segments by 16.
+; Forcing segments to 0 ensures the CPU looks exactly at our 'org 0x7C00' memory offset.
+; This prevents the hardware from reading the wrong RAM addresses and crashing the system.
 
 
 mov ah, 0x0e
@@ -30,7 +35,24 @@ in al, 0x92 ;reads data from a port into AL. The second bit (Bit 1) of the byte 
 or al,0x02 ; 0x02 in binary is 00000010, which targets the A20 switch.
 out 0x92,al ;writes data from AL to a port.
 
-cli    ; <--- ADD THIS: Disable all hardware interrupts! (without this faced a irritating problem...)
+cli    ;Disable all hardware interrupts! (without this faced a irritating problem...)
+; The motherboard has a Programmable Interval Timer (PIT) that fires a hardware
+; interrupt 18.2 times every second. In 16-bit Real Mode, the BIOS catches this
+; interrupt, updates the system clock, and returns control to our code.
+;
+; The moment we flip the PE bit in cr0 to enter 32-bit Protected Mode, we lose
+; the BIOS entirely. If the timer ticks right as we are transitioning, the CPU
+; will pause our code, look for a 32-bit Interrupt Descriptor Table (IDT) to
+; handle the timer, realize the IDT doesn't exist yet, and instantly Panic/Triple-Fault.
+; (This is why our print loop died mid-sentence at "Stage 2 l...").
+;
+; FIX: 'cli' (Clear Interrupt Flag)
+; This instruction modifies the CPU's EFLAGS register, explicitly telling the
+; processor to go deaf. It blocks all maskable hardware interrupts (like the
+; timer and keyboard). We execute this right before loading the GDT to create
+; a perfectly silent, safe vacuum for the CPU to transition into 32-bit mode.
+; We will not use 'sti' (Set Interrupt Flag) to turn them back on until we
+; have written our C kernel's IDT to safely handle them.
 
 lgdt [gdt_descriptor] ;Load Global Descriptor Table, it hands the table directly to the CPU's internal hardware.
 ;in NASM, if we write lgdt gdt_descriptor, the assembler thinks we want to load the literal memory address of the descriptor into the CPU register.
@@ -52,7 +74,21 @@ mov cr0,eax ; back to cr0
 ;entry 1 is the Null Descriptor (Offset 0x0)(0-7). [The GDT rule]
 ;entry 2 is the Code Segment (Offset 0x08 - because the Null descriptor is 8 bytes long)(8-15).
 ;entry 3 is the Data Segment (Offset 0x10)(16-23)(0x10 in hex).
-jmp dword 0x08:init_pm
+
+jmp dword 0x08:init_pm ;To flush the CPU pipeline and enter 32-bit mode, we execute a Far Jump: 'jmp 0x08:init_pm'.
+; Because this instruction is written inside our 'bits 16' zone, the Assembler
+; normally compiles it assuming 'init_pm' is a small 16-bit memory address.
+; However, because we are passing this file to an ELF32 Linker to connect it
+; with our C Kernel, the Linker calculates 'init_pm' as a massive 32-bit address.
+;
+; Without the 'dword' keyword, the assembler truncates (chops off) the top half
+; of the 32-bit address. The CPU jumps to the wrong location in memory, hits
+; empty garbage data, and crashes silently.
+
+;Adding 'dword' (Double Word / 32 bits) forces the 16-bit assembler to allocate
+; enough space for the full 32-bit memory address provided by the ELF Linker.
+; This guarantees we land perfectly at the 'init_pm' label inside our C-linked RAM.
+
 ;we must jump to the Code Segment (0x08) and absolutely cannot jump to the Data Segment (0x10) because of hardware-enforced security.
 ;the code segment access byte says 10011010b (4th bit from the right is 1, meaning Executable).
 ;data segment access byte says 10010010b (4th bit from the right is 0, meaning Not Executable).
