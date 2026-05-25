@@ -1,3 +1,4 @@
+#include "include/vga.h"
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
  *But we are the operating system. There is nothing to return to!
@@ -6,12 +7,17 @@
  *The CPU will panic and triple-fault.
  */
 void kernel_main() {
+    /* Code-Update until the next ----> , (note: this is an old code used for testing, it's commented out and not deleted to make it suitable to learning and decoding.)
     char* vga_buff=(char*)0xb8000; //a pointer called 'vga_buff' at memory address 0xB8000. motherboard is physically wired so that anything written to 0xB8000 goes straight .
     // into the video card's memory instead of regular RAM. We use (char*) to tell the compiler: "Treat this raw memory address as a row of text character boxes."
     //in VGA text mode, the screen is a grid of boxes, and each box requires 2 bytes of data.
     vga_buff[0]='K'; // Index [0] is the first byte, which controls WHAT letter is displayed in the top-left corner. We assign the character 'K' (which the compiler automatically turns into its 8-bit ASCII number, 75).
     vga_buff[1]=0x0f;// Index [1] is the second byte, which sits right next to the character in memory.
     // The hex code 0x0F is split into two numbers: The first digit (0) tells the hardware to make the background pitch black.The second digit (F) tells the hardware to paint the letter 'K' in bright white.
+    ---->*/
+
+    vga_print("Hello from the NG-OS Kernel!\n");
+    vga_print("System Initialized Successfully.\n");
 
 
     /*

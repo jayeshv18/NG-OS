@@ -7,6 +7,11 @@ bits 16 ;we are still in 16 bit mode
 
 ;org 0x9000 ;where the code exactly will be present based on previous file/sector
 
+xor ax, ax      ; Set AX to 0 quickly, xor ax, ax is the fastest, most efficient way to set a register to zero.
+mov ds, ax      ; Set Data Segment to 0
+mov es, ax      ; Set Extra Segment to 0
+
+
 mov ah, 0x0e
 mov si, stage2_msg
 print_loop:
@@ -24,6 +29,8 @@ in al, 0x92 ;reads data from a port into AL. The second bit (Bit 1) of the byte 
 ;MODIFY bit 1 (set it to 1) using a logical OR.
 or al,0x02 ; 0x02 in binary is 00000010, which targets the A20 switch.
 out 0x92,al ;writes data from AL to a port.
+
+cli    ; <--- ADD THIS: Disable all hardware interrupts! (without this faced a irritating problem...)
 
 lgdt [gdt_descriptor] ;Load Global Descriptor Table, it hands the table directly to the CPU's internal hardware.
 ;in NASM, if we write lgdt gdt_descriptor, the assembler thinks we want to load the literal memory address of the descriptor into the CPU register.
@@ -45,7 +52,7 @@ mov cr0,eax ; back to cr0
 ;entry 1 is the Null Descriptor (Offset 0x0)(0-7). [The GDT rule]
 ;entry 2 is the Code Segment (Offset 0x08 - because the Null descriptor is 8 bytes long)(8-15).
 ;entry 3 is the Data Segment (Offset 0x10)(16-23)(0x10 in hex).
-jmp 0x08:init_pm
+jmp dword 0x08:init_pm
 ;we must jump to the Code Segment (0x08) and absolutely cannot jump to the Data Segment (0x10) because of hardware-enforced security.
 ;the code segment access byte says 10011010b (4th bit from the right is 1, meaning Executable).
 ;data segment access byte says 10010010b (4th bit from the right is 0, meaning Not Executable).
@@ -75,7 +82,7 @@ mov ebp, 0x90000 ;setting up a massive new 32-bit stack
 mov esp, ebp ;esp stands for Extended Stack Pointer
 ;when we start a brand-new stack, it must be completely empty. By making esp match ebp (0x90000), we are initializing the stack. The very next time we run a push instruction, esp will safely subtract memory from 0x90000 and store the data.
 
-;Code-Update until the next ----> , (note: this is a old code used for testing, its commented out and not deleted to make it suitable to learning and decoding.)
+;Code-Update until the next ----> , (note: this is an old code used for testing, its commented out and not deleted to make it suitable to learning and decoding.)
 ;as we are officially into 32 bit mode,
 ;In 16-bit mode, we could ask the BIOS to print letters for us using int 0x10.
 ;the moment we flipped cr0 to 1, we entered 32-bit Protected Mode. We instantly lost access to the BIOS. If we try to use int 0x10 to print a message to say "Hey!", the CPU will crash.

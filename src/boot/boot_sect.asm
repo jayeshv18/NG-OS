@@ -53,7 +53,7 @@ jmp print_loop;jump back to the top of the loop to get the next letter!
 
 load_disk:
 mov ah, 0x02 ;reading the next sector ie the next stage of the boot
-mov al, 15 ;number 15 tells the BIOS exactly how many sectors (blocks of 512 bytes) to grab from the disk in one single scoop.
+mov al, 30 ;number 30 tells the BIOS exactly how many sectors (blocks of 512 bytes) to grab from the disk in one single scoop. 30 gives plenty of space(15kb)
 ;15 because your Stage 2 code is too big to fit in one 512-byte sector, but it easily fits within 7.5 KB. You are telling the BIOS: "Go to Sector 2, grab the next 15 sectors in a row, and load them all into memory for me."
 ;if youre bored or not able to understand then think about me :(
 mov ch, 0 ;cyclinder 0. Hard-drives follow CHS mapping(cyclinder,head,sector).
