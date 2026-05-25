@@ -3,25 +3,58 @@
 #Makefile is that it acts as an intelligent blueprint. Instead of typing a massive 50-word command every time you change a single line of C code, you just type make in your terminal.
 
 #Instead of writing x86_64-elf-gcc and all those flags over and over, we store them in variables at the top of the file.
-all: ng-os.elf #It will look at all, realize it needs ng-os.elf, and run the linker script to give you your final kernel binary!
+
 CC = gcc
-CFLAGS = -ffreestanding -nostdlib -mno-red-zone -fno-pic -fno-pie -mcmodel=kernel
+CFLAGS = -m32 -march=i386 -ffreestanding -fno-pie -fno-pic -fno-stack-protector -fno-builtin
+
+# Define assembler and flags
+ASM = nasm
+ASMFLAGS_BIN = -f bin
+ASMFLAGS_ELF = -f elf32
 
 #you reference a variable by wrapping it in $().
 #The syntax is always Target : Dependency.
 #Target=build/kernel.o The file we want to create.
 #Dependency=src/kernel.c The file required to make it.
+# Define linker and flags
+LD = ld
+LDFLAGS = -m elf_i386 -T linker.ld --oformat binary
+
+#Targets
+all: clean build/ng-os.img run
+
+#Compile Sector 1
+build/boot_sect.bin: src/boot/boot_sect.asm
+	mkdir -p build
+	$(ASM) $(ASMFLAGS_BIN) $< -o $@
+
+#Compile Stage 2
+build/stage2.o: src/boot/stage2.asm
+	mkdir -p build
+	$(ASM) $(ASMFLAGS_ELF) $< -o $@
+
+#Compile C Kernel
 build/kernel.o: src/kernel.c
-		mkdir -p build
-		$(CC) $(CFLAGS) -c src/kernel.c -o build/kernel.o #compiler, pass our safety flags, tell it to compile without linking (-c), and specify the output file (-o).
+	mkdir -p build
+	$(CC) $(CFLAGS) -c $< -o $@
 
-build/serial.o: src/serial.c
-		mkdir -p build
-		$(CC) $(CFLAGS) -c src/serial.c -o build/serial.o
+#Compile VGA Driver
+build/vga.o: src/vga.c
+	mkdir -p build
+	$(CC) $(CFLAGS) -c $< -o $@
 
-#Once we have our compiled object file (kernel.o), we need to run it through the linker script (linker.ld) to organize the memory into our final, bootable OS executable (ng-os.elf).
-ng-os.elf: build/kernel.o build/serial.o
-		$(CC) -T linker.ld -o ng-os.elf $(CFLAGS) -no-pie build/kernel.o build/serial.o
-	#-T linker.ld: This is the magic flag. It tells the GCC linker, "Do not use your default Linux memory map. Use the custom 4KB-aligned blueprint we wrote in linker.ld."
+#Link it all into a flat binary
+build/kernel.bin: build/stage2.o build/vga.o build/kernel.o
+	$(LD) $(LDFLAGS) $^ -o $@
+
+# the final OS image
+build/ng-os.img: build/boot_sect.bin build/kernel.bin
+	cat $^ > $@
+
+# Run QEMU
+run: build/ng-os.img
+	qemu-system-x86_64 -drive format=raw,file=$<
+
+# Clean build directory
 clean:
-	rm -f build/*.o ng-os.elf
+	rm -f build/*

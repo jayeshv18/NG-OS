@@ -27,7 +27,7 @@ void vga_print(const char* str) {
             vga_index = (vga_index / 80 + 1) * 80; //VGA screen is exactly 80 characters wide
             /*
              *vga_index / 80: Integer division drops the remainder entirely. 85 / 80 = 1.
-             *This tells us that you are on Row 1.+ 1: Moves our target to the next physical line. 1 + 1 = 2.
+             *This tells us that we are on Row 1.+ 1: Moves our target to the next physical line. 1 + 1 = 2.
              *we want Row 2.* 80: Multiplies by the screen width to find the starting index number of that new row. 2 * 80 = 160. which is the absolute beginning of the next line!
              */
         }else {
@@ -44,6 +44,28 @@ void vga_print(const char* str) {
             vga_index++;
         }
         str++; // Move to the next text character pointer in RAM
-
     }
+
+}
+
+void vga_hex_print(uint32_t num){
+    //32-bit hex number has exactly 8 digits.
+    char hex_str[11]="0x00000000"; //The 11 is for 0x, the 8 digits, and the \0 null terminator
+    char* hex_digits = "0123456789ABCDEF"; //array lookup
+    for (int i = 9; i >= 2; i--) {//we start at index 9 (the very last digit slot before '\0') and move backwards. Hex is counted from the back.
+        uint8_t nibble=num & 0x0F;
+        /*
+         * number 0x0F in binary is written as: 0000 1111.
+         * sample 8-bit number like 0x4A. In binary, 0x4A is written as: 0100 1010.
+        *     0100 1010  (The original number: 0x4A)
+            & 0000 1111  (The mask/stencil:    0x0F)
+              ───────────
+              0000 1010  (result is 10 ie A)
+         */
+        hex_str[i]=hex_digits[nibble];
+        num >>= 4; // Before shift: 0100 1010 (0x4A), After shift:  0000 0100 because the other half is also need to be decoded.
+    }
+    vga_print(hex_str); //hand the finished string to our existing VGA print driver
+
+
 }
