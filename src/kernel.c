@@ -1,4 +1,5 @@
 #include "include/vga.h"
+#include "include/idt.h"
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
  *But we are the operating system. There is nothing to return to!
@@ -18,9 +19,10 @@ void kernel_main() {
     vga_clear_screen();
     vga_print("Hello from the NG-OS Kernel!\n");
     vga_print("System Initialized Successfully.\n");
-    vga_hex_print(0x1BADB002); //translates a raw 32-bit number into readable text by slicing it into 4-bit chunks. Uses a bitwise mask and right-shifts to decode digits right-to-left before printing via VGA.
+    //vga_hex_print(0x1BADB002); //translates a raw 32-bit number into readable text by slicing it into 4-bit chunks. Uses a bitwise mask and right-shifts to decode digits right-to-left before printing via VGA.
     // for more details check vga.c for vga_hex_print.
 
+    idt_init();
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,

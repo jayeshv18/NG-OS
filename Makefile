@@ -38,13 +38,26 @@ build/kernel.o: src/kernel.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
 
+build/idt.o: src/idt.c
+	mkdir -p build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+
+build/keyboard.o: src/keyboard.c
+	mkdir -p build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/interrupt.o: src/interrupt.asm
+	mkdir -p build
+	$(ASM) $(ASMFLAGS_ELF) $< -o $@
+
 #Compile VGA Driver
 build/vga.o: src/vga.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 #Link it all into a flat binary
-build/kernel.bin: build/stage2.o build/vga.o build/kernel.o
+build/kernel.bin: build/stage2.o build/vga.o build/kernel.o build/idt.o build/keyboard.o build/interrupt.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
 # the final OS image

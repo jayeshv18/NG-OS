@@ -8,4 +8,6 @@ add_executable(NGOS
         src/include/serial.h
         src/serial.c
         src/kernel.c
-        src/include/limine.h)
+        src/include/limine.h
+        src/vga.c
+        src/vga.c)

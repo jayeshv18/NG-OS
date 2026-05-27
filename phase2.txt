@@ -1,0 +1,200 @@
+The IDT (Interrupt Descriptor Table) is a hardware-enforced lookup table built into the x86/x64 CPU [1].
+It acts as the kernel's Emergency Dispatch Center.
+Whenever the physical hardware demands attention (like a keyboard keypress, a timer tick, or a critical memory crash), the CPU drops what it is doing, pauses your code, and looks at this master table to find the exact C or Assembly function responsible for handling that specific event.
+
+When writing a raw, freestanding kernel, you do not own the CPU alone. External hardware chips share control of the motherboard.
+Without an IDT, your operating system is fundamentally deaf, mute, and fragile:
+    Handling Disasters (Exceptions): If your C code divides a number by zero, or references a broken pointer, the CPU panics. It looks for the IDT to handle the disaster. If there is no IDT, the CPU panics further, fires a Triple Fault, and instantly hard-reboots your computer.
+    Handling the Outside World (Hardware Interrupts): When a user presses a key on your Asus laptop keyboard, a physical microchip on the motherboard blasts an electrical signal to the CPU core. Without an IDT, the CPU has no idea what code to run to read that key, so the keystroke is lost completely.
+
+The IDT is structured exactly like the GDT: it is a simple continuous array sitting in your kernel memory containing 256 rows (gates).
+Each row is an 8-byte structure (in 32-bit mode) or a 16-byte structure (in 64-bit mode) that holds a memory pointer to an ISR (Interrupt Service Routine)—which is just a standard low-level function you write.
+The slots are hardwired by Intel processors to mean very specific things:
+    Slots 0 - 31 (The CPU Exceptions): Reserved entirely for internal CPU faults and errors.
+        Slot 0: Divide-by-Zero (Someone did x / 0 in C).
+        Slot 13: General Protection Fault (Your GDT or memory rules were breached).
+        Slot 14: Page Fault (Your pointer tried to read unmapped memory)
+
+    Slots 32 - 47 (The Hardware Interrupts / IRQs): These map to physical motherboard components.
+        Slot 32: The System Timer (PIT ticking 18.2 times a second).
+        Slot 33: The PS/2 Keyboard (Fires every single time a key is pressed or released).
+
+    Slots 48 - 255 (Software Interrupts): Completely open slots for your operating system to trigger custom system events (historically used for system calls).
+
+Step-by-Step Mechanical Handoff
+Imagine you are running your main text printing loop in kernel.c, and the user suddenly presses a key on the keyboard. Here is the split-second hardware sequence:
+ 1. HARDWARE EVENT                 2. THE IDT GATEWAY LOOKUP
++───────────────────────+         +─────────────────────────────────────────+
+
+| User Presses a Key!   |         | CPU reads LIDT Pointer -> Finds IDT Array|
+| Keyboard fires IRQ 1  | ───────►| Maps IRQ 1 to IDT Slot 33               |
++───────────────────────+         +─────────────────────────────────────────+
+                                                       │
+                                                       ▼
+ 4. RE-ENABLE & RETURN             3. EXECUTING THE HANDLER
++───────────────────────+         +─────────────────────────────────────────+
+
+| Handler runs 'iret'   |         | CPU automatically pushes current state  |
+| CPU pops stack frames | ◄───────| Leaps to your custom C/Asm function:    |
+| Resumes C print loop  |         | 'keyboard_handler_isr()'                |
++───────────────────────+         +─────────────────────────────────────────+
+
+1. The Shoulder Tap: The keyboard hardware controller signals the CPU.
+Because you previously used cli to turn off interrupts during Phase 1, the CPU ignores it until you eventually turn them back on using sti (Set Interrupt Flag).
+
+2. The Interception: Once interrupts are on, the CPU catches the keyboard event (mapped to IDT Slot 33). It freezes your main C kernel loop immediately.
+
+3. The Automatic Hardware Push: Before jumping away, the CPU automatically saves its position so it can return later.
+It pushes the essential execution state registers onto your active 32-bit stack (ss, esp, eflags, cs, eip).
+
+4. The Jump: The CPU reads IDT Entry 33, extracts the raw memory address of your handler function, and jumps straight into it.
+
+5. The Safe Return: Your handler function reads the keyboard port, prints the key to 0xB8000, and finishes by executing a special assembly instruction called iret (Interrupt Return).
+The CPU pops those saved state registers off the stack, restores your main loop, and your kernel continues running as if nothing happened.
+
+Think of the IDT as a switchboard. When a hardware device (like the keyboard or the system timer) needs attention, it sends an electrical pulse to the CPU.
+The CPU pauses your C code, looks at the IDT, finds the exact memory address of the function you wrote to handle that specific device, executes it, and then resumes your code.
+
+1. KEYBOARD CONTROLLER FIRES (IRQ 1)
+   ↓
+2. CPU looks at its throne → Reads the IDTR register (Loaded by 'lidt')
+   ↓
+3. The register points to your IDT Array at index 33 (Keyboard Line)
+   ↓
+4. CPU opens IDT Entry #33 and reads the fields:
+   - It pulls Selector 0x08 (Activates Kernel GDT rules)
+   - It glues Lower + Upper offsets to get the exact RAM address of your C function
+   - It checks Type 0x8E to make sure it's valid
+   ↓
+5. CPU freezes your main OS loop, leaps straight to your C keyboard function,
+   and prints the letter on your monitor.
+
+-------------------------------
+## GDT (Global Descriptor Table)
+
+The **Global Descriptor Table (GDT)** is a special data structure used by the x86 CPU in **Protected Mode** and **64-bit mode** to define how memory should be accessed and protected. In older CPUs, programs directly used memory addresses, which was dangerous because any program could overwrite another program or even the operating system itself. To solve this, Intel introduced segmentation and the GDT.
+The GDT is basically a table stored in RAM where each entry is called a **descriptor**.
+Every descriptor describes a memory segment by defining its **base address** (where the segment starts), **limit** (how large it is), and **permissions** (whether code can execute there, whether data can be written, and which privilege level can access it). The CPU does not directly use raw segment values anymore in protected mode.
+Instead, segment registers like **CS, DS, SS, ES, FS, and GS** store small values called **selectors**.
+A selector points to a descriptor inside the GDT. When the CPU loads a selector, it finds the corresponding descriptor, checks its permissions, caches the information internally, and uses it to safely access memory.
+This mechanism introduced memory protection, privilege rings, multitasking safety, and kernel-user isolation.
+Even though modern operating systems mostly use **paging** instead of segmentation, the GDT is still mandatory because the CPU requires it to enter protected mode and long mode, perform privilege switching, manage the **Task State Segment (TSS)**, and handle low-level CPU security mechanisms. In modern systems, most segments use a **flat memory model** where base = 0 and limit = 4GB, making segmentation logically “disabled,” but the GDT still acts as a foundational CPU configuration structure required for system operation.
+
+---
+
+## IDT (Interrupt Descriptor Table)
+
+The **Interrupt Descriptor Table (IDT)** is another critical CPU table in x86 architecture, but instead of defining memory segments like the GDT, it defines how the CPU handles **interrupts and exceptions**.
+An interrupt is any event that temporarily stops normal execution so the CPU can immediately respond to something important.
+Examples include keyboard presses, mouse movement, timer ticks, disk operations, divide-by-zero errors, invalid instructions, and page faults.
+The IDT is basically a table of **interrupt descriptors**, where each entry tells the CPU which function or handler should run when a specific interrupt occurs.
+The CPU supports 256 interrupt vectors (0–255), and each vector corresponds to an IDT entry.
+For example, interrupt vector 14 is usually the **page fault handler**, while vector 33 often handles the keyboard interrupt after IRQ remapping.
+When an interrupt occurs, the CPU automatically pauses the current program, saves important state information like **EIP/RIP, CS, and FLAGS** onto the stack, switches to the appropriate handler defined in the IDT, executes the interrupt service routine (ISR), and then restores the previous state using the `iret` instruction so execution can continue normally.
+The IDT is loaded using the **IDTR register** with the `lidt` instruction, similar to how the GDT uses GDTR and `lgdt`. Without the IDT, the operating system cannot handle hardware devices, exceptions, timers, system calls, multitasking, or fault recovery.
+In simple terms, the GDT defines the CPU’s memory access and protection rules, while the IDT defines the CPU’s event handling and emergency response system. Together, they form two of the most fundamental structures required for protected-mode operating systems and modern kernel design.
+
+-------------
+Deep Dive: What is the PIC?PIC stands for Programmable Interrupt Controller. Specifically, IBM used the Intel 8259A chip.If you look at the physical motherboard inside your Asus laptop, the CPU only has one pin dedicated to receiving hardware interrupts (the INTR pin). But a computer has dozens of devices: keyboards, mice, hard drives, timers, graphics cards.If all those devices tried to send voltage to that single CPU pin at the same time, the motherboard would short circuit.The PIC acts as a multiplexer. All the hardware devices wire their interrupt lines into the PIC. The PIC decides which device is the most important, puts the others on hold, and sends a single, clean signal to the CPU's INTR pin.The Cascade (Master and Slave):One 8259A chip can only handle 8 devices. Very quickly, computer engineers realized 8 wasn't enough. So, they glued a second PIC onto the motherboard.The Master PIC: Plugs directly into the CPU. Handles IRQs 0 through 7.The Slave PIC: Plugs into the Master PIC's IRQ 2 slot. Handles IRQs 8 through 15.3. The IRQ Lines (The Hardware Telephone Wires)IRQ stands for Interrupt Request. These are the physical copper traces on the motherboard that connect devices to the PIC chips. Here is the standard IBM PC wiring map that is still used today:The Master PIC (Base offset 32 / 0x20)IRQ 0 (IDT 32): System Timer. The heartbeat of the motherboard. It ticks constantly.IRQ 1 (IDT 33): Keyboard. * IRQ 2 (IDT 34): Cascade. This pin is reserved. It is where the Slave PIC plugs in.IRQ 3 (IDT 35): COM2. Second serial port.IRQ 4 (IDT 36): COM1. First serial port.IRQ 5 (IDT 37): LPT2 / Sound Card.IRQ 6 (IDT 38): Floppy Disk Controller.IRQ 7 (IDT 39): LPT1. Parallel port (ancient printers).The Slave PIC (Base offset 40 / 0x28)IRQ 8 (IDT 40): Real-Time Clock (RTC).IRQ 9 (IDT 41): ACPI. Power management.IRQ 10 (IDT 42): Open / PCI devices.IRQ 11 (IDT 43): Open / PCI devices.IRQ 12 (IDT 44): PS/2 Mouse.IRQ 13 (IDT 45): Math Coprocessor. (From before CPUs had built-in floating-point units).IRQ 14 (IDT 46): Primary ATA/IDE. Your main hard drive.IRQ 15 (IDT 47): Secondary ATA/IDE. Your CD-ROM or secondary drive.4. What are ICWs? (Initialization Command Words)The PIC is a complex piece of silicon. You can't just send it one command to remap it; you have to put it into a specific "configuration mode" by sending a sequence of 4 bytes. These are called Initialization Command Words (ICW).If you don't send all 4 in the exact correct order, the PIC ignores you.ICW1 (0x11): The Wake-Up Call.This tells the PIC, "Clear your memory, prepare to be reconfigured, and expect 3 more commands from me. Also, I am using cascade mode (two PICs)."ICW2 (0x20 and 0x28): The Offset (The Remap).This is the command that actually fixes the Triple Fault. It tells the Master PIC to add 32 to all its IRQs, and the Slave PIC to add 40 to all its IRQs.ICW3 (0x04 and 0x02): The Wiring Map.The PICs don't automatically know they are connected to each other. This command tells the Master, "Listen to pin 2, the Slave is talking there." It tells the Slave, "You are plugged into pin 2 of the Master."ICW4 (0x01): The Architecture Protocol.The 8259A chip was originally designed in the 1970s for a processor called the MCS-80. Sending 0x01 tells the chip, "We are using x86 processor architecture, use modern signal timing."Once you send ICW4, the PIC locks its configuration, exits setup mode, and starts routing your keyboard presses safely to IDT entry 33!
+----
+0x1BADB002
+This is your bootup test print. You hardcoded vga_hex_print(0x1BADB002); inside kernel_main() to run right before you initialized the IDT.
+
+0x0000001E (The "Make" Code)
+When you pressed your finger down on the 'A' key, the keyboard sent a raw hexadecimal identifier to port 0x60. In the standard IBM PC keyboard layout, 0x1E is the physical hardware ID for the letter 'A'.
+When a key is pressed down, it is called a Make Code.
+
+0x0000009E (The "Break" Code)
+When you lifted your finger off the 'A' key, the keyboard fired a second hardware interrupt to tell the OS you let go.
+How does the keyboard signify a release? It takes the original Make Code (0x1E) and adds 0x80 to it.
+0x1E + 0x80 = 0x9E
+When a key is released, it is called a Break Code.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -28,7 +28,10 @@ jmp print_loop
 
 unlock_a20:
 ; cannot use mov to write to hardware ports, must use the in and out instructions.
-;The motherboard listens on port 0x92.
+;The motherboard listens on port 0x92. motherboard's physical System Control Port A, exactly 1 byte (8 bits) wide.
+;Bit 0 Fast Reset: If you write a 1 to this bit, it sends an electrical pulse straight to the CPU's reset wire, instantly rebooting your entire computer.
+;Bit 1 A20 Gate Switch: 0 means the 21st memory wire is locked shut (trapping the computer in 1MB of RAM).
+;1 means the wire is open, unlocking all your laptop's RAM so you can enter 32-bit and 64-bit modes safely.
 in al, 0x92 ;reads data from a port into AL. The second bit (Bit 1) of the byte stored at this port controls the A20 line.
 ;If it's a 0, A20 is disabled. If it's a 1, A20 is enabled.
 ;MODIFY bit 1 (set it to 1) using a logical OR.
