@@ -42,6 +42,9 @@ build/idt.o: src/idt.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
 
+build/timer.o: src/timer.c
+	mkdir -p build
+	$(CC) $(CFLAGS) -c $< -o $@
 
 build/keyboard.o: src/keyboard.c
 	mkdir -p build
@@ -57,7 +60,7 @@ build/vga.o: src/vga.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 #Link it all into a flat binary
-build/kernel.bin: build/stage2.o build/vga.o build/kernel.o build/idt.o build/keyboard.o build/interrupt.o
+build/kernel.bin: build/stage2.o build/vga.o build/kernel.o build/idt.o build/keyboard.o build/interrupt.o build/timer.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
 # the final OS image
