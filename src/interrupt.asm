@@ -8,9 +8,12 @@
 ;and finally issues the iret (interrupt return) instruction to cleanly resume the pristine main kernel loop.
 
 section .text
+extern timer_handler_main
 extern keyboard_handler_main
+global timer_handler
 global keyboard_handler ;need to make our assembly stub (function) available to our C code (for the IDT setup)
 bits 32
+
 keyboard_handler:
 pushad ;save ALL general registers (eax, ebx, ecx, etc.) onto the stack
 call keyboard_handler_main ;run C code now! The compiler can overwrite whatever it wants
@@ -22,7 +25,11 @@ iret ;safely resume the main loop using the specialized interrupt return
 
 ;if we dont make a copy of all registers then the C code might overwrite the registers and corrupt the data.
 
-
+timer_handler:
+pushad ;save the CPU state
+call timer_handler_main ;run our C code)
+popad ;restore the CPU state
+iret ;return from the interrupt
 
 
 

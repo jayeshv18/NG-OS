@@ -2,6 +2,7 @@
 #include "include/io.h"
 
 extern void keyboard_handler(); //assembly stub (function) so C knows it exists.
+extern void timer_handler();
 
 idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -81,8 +82,10 @@ void idt_init(void) {
     for (int i = 0; i < 256; i++) {
         idt_set_gate(i,0,0,0); //clean the ram if any garbage left by previous storing data.
     }
-    //registering the keyboard interrupt handler at index 33 (0x21)
-    idt_set_gate(33, (uint32_t)keyboard_handler, 0x08, 0x8E);
+
+    idt_set_gate( 32, (uint32_t)timer_handler, 0x08, 0x8E); //registering the timer handler at index 32 (0x20)
+    idt_set_gate(33, (uint32_t)keyboard_handler, 0x08, 0x8E); //registering the keyboard interrupt handler at index 33 (0x21)
+
     /*
      *0x8E = 10001110, 7th bit: Is this handler currently loaded in RAM and ready to use? 1 yes, 0 no.
      *6th and 5th bit (00): What security clearance (Ring Level) does a piece of software need to trigger this interrupt using software commands. (00) is kernel.
@@ -92,9 +95,11 @@ void idt_init(void) {
     */
 
     pic_remap();//move the hardware signals out of the danger zone!
-    //Mute all hardware signals except the Keyboard (IRQ 1)
-    outb(0x21, 0xFD); // 0x21 is the Master PIC Data Port
+    //0xFD is binary 11111101 (Listens only to Bit 1).
+    //0xFC. This is binary 11111100. Now the PIC will listen to both Bit 0 (Timer) AND Bit 1 (Keyboard).
+    outb(0x21, 0xFC); // 0x21 is the Master PIC Data Port, unmute
     outb(0xA1, 0xFF); // 0xA1 is the Slave PIC Data Port
+
     // inline asm: Load the table rules into the CPU's internal IDTR register
     // The "m" constraint tells GCC to pass the memory address of our idtp structure.
     __asm__ __volatile__("lidt %0" : : "m" (idtp)); //find the exact physical memory address of idtp in RAM, and shove that memory address into the %0 placeholder
