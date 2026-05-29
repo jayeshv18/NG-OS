@@ -1,3 +1,14 @@
+
+
+; [ARCHIVED] Legacy 16-bit bootloader loop kept strictly for revision and reference.
+; Production builds utilize GRUB for memory management and kernel loading.
+; Excellent educational blueprint for understanding the low-level x86 handoff.
+
+; NOTE: This code is currently inactive. It is retained solely as a reference
+
+
+
+
 ;memory is divided into physical chunks called "sectors." A standard sector holds exactly 512 bytes of data.
 ;Sector 0 is the absolute first chunk of data on the entire disk.
 ;the motherboard's BIOS doesn't know how to read files. It blindly reaches out to the USB drive, grabs only Sector 0,

@@ -1,3 +1,19 @@
+
+
+
+
+
+; [ARCHIVED] Legacy 16-bit bootloader loop kept strictly for revision and reference.
+; Production builds utilize GRUB for memory management and kernel loading.
+; Excellent educational blueprint for understanding the low-level x86 handoff.
+
+; NOTE: This code is currently inactive. It is retained solely as a referenc
+
+
+
+
+
+
 section .text ;This tells the linker where the executable code is.
 extern kernel_main ;extern stands for External, logic: kernel_main is present in kernel.c so leave memory for it and execute.
 bits 16 ;we are still in 16 bit mode
