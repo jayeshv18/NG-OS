@@ -1,76 +1,59 @@
-#A Makefile works by defining "targets" (the files you want to create), their "dependencies" (the files needed to make them), and the terminal command required to build them.
-#A Makefile is a simple text file that acts as an automation script for building software.
-#Makefile is that it acts as an intelligent blueprint. Instead of typing a massive 50-word command every time you change a single line of C code, you just type make in your terminal.
-
-#Instead of writing x86_64-elf-gcc and all those flags over and over, we store them in variables at the top of the file.
 
 CC = gcc
+# -m32: Force 32-bit compilation.
+# -march=i386: Use base x86 instruction set for maximum hardware compatibility.
+# -ffreestanding: Tell the compiler there is no host OS and no standard library (<stdio.h>).
+# -fno-pie / -fno-pic: Disable position-independent code (security features that break bare-metal).
 CFLAGS = -m32 -march=i386 -ffreestanding -fno-pie -fno-pic -fno-stack-protector -fno-builtin
 
-# Define assembler and flags
 ASM = nasm
-ASMFLAGS_BIN = -f bin
-ASMFLAGS_ELF = -f elf32
+#Compile assembly to standard 32-bit ELF object files so the Linker can read them.
+ASMFLAGS = -f elf32
 
-#you reference a variable by wrapping it in $().
-#The syntax is always Target : Dependency.
-#Target=build/kernel.o The file we want to create.
-#Dependency=src/kernel.c The file required to make it.
-# Define linker and flags
 LD = ld
-LDFLAGS = -m elf_i386 -T linker.ld --oformat binary
+# -m elf_i386: Force the Linker to output a 32-bit ELF binary.
+# -T linker.ld: Feed the Linker our custom blueprint.
+LDFLAGS = -m elf_i386 -T linker.ld
 
-#Targets
-all: clean build/ng-os.img run
+#Typing 'make' will sequentially clean old files, build the ISO, and launch QEMU.
+all: clean build/ng-os.iso run
 
-#Compile Sector 1
-build/boot_sect.bin: src/boot/boot_sect.asm
+
+#Compile boot assembly
+build/boot.o: src/boot/boot.asm
 	mkdir -p build
-	$(ASM) $(ASMFLAGS_BIN) $< -o $@
+	$(ASM) $(ASMFLAGS) $< -o $@
 
-#Compile Stage 2
-build/stage2.o: src/boot/stage2.asm
-	mkdir -p build
-	$(ASM) $(ASMFLAGS_ELF) $< -o $@
-
-#Compile C Kernel
-build/kernel.o: src/kernel.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build/idt.o: src/idt.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build/timer.o: src/timer.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build/keyboard.o: src/keyboard.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
-
+#Compile interrupt assembly
 build/interrupt.o: src/interrupt.asm
 	mkdir -p build
-	$(ASM) $(ASMFLAGS_ELF) $< -o $@
+	$(ASM) $(ASMFLAGS) $< -o $@
 
-#Compile VGA Driver
-build/vga.o: src/vga.c
+#Compile C files
+build/%.o: src/%.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-#Link it all into a flat binary
-build/kernel.bin: build/stage2.o build/vga.o build/kernel.o build/idt.o build/keyboard.o build/interrupt.o build/timer.o
+#Stitch all the .o files together into one final kernel.bin file.
+#The order here doesn't strictly matter because linker.ld enforces the layout.
+build/kernel.bin: build/boot.o build/interrupt.o build/kernel.o build/idt.o build/keyboard.o build/timer.o build/vga.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
-# the final OS image
-build/ng-os.img: build/boot_sect.bin build/kernel.bin
-	cat $^ > $@
 
-# Run QEMU
-run: build/ng-os.img
-	qemu-system-x86_64 -drive format=raw,file=$<
+build/ng-os.iso: build/kernel.bin
+	# 1. Create a temporary folder structure that mimics a GRUB boot CD
+	mkdir -p iso/boot/grub
+	# 2. Copy our GRUB configuration text file from the root into the CD layout
+	cp grub.cfg iso/boot/grub/grub.cfg
+	# 3. Copy our compiled kernel into the CD layout
+	cp build/kernel.bin iso/boot/kernel.bin
+	# 4. Use the xorriso tool to wrap the folder into a bootable .iso file
+	grub-mkrescue -o build/ng-os.iso iso
 
-# Clean build directory
+run: build/ng-os.iso
+	# Launch QEMU with a virtual CD-ROM drive instead of a raw hard drive
+	qemu-system-i386 -cdrom build/ng-os.iso
+
 clean:
-	rm -f build/*
+	rm -rf build/*
+	rm -rf iso/boot/kernel.bin
