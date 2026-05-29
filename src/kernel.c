@@ -1,5 +1,6 @@
 #include "include/vga.h"
 #include "include/idt.h"
+#include "include/multiboot.h"
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
  *But we are the operating system. There is nothing to return to!
@@ -7,7 +8,13 @@
  *If kernel_main ever reaches the bottom closing bracket }, the CPU will try to execute whatever random garbage data is sitting in memory right after our kernel.
  *The CPU will panic and triple-fault.
  */
-void kernel_main() {
+
+//because the x86 stack operates on a Last-In, First-Out (LIFO) basis, our C function will read the parameters in the exact opposite order they were pushed.
+/*
+ * 'grub_magic_number' reads EAX (Pushed 2nd, sitting at the absolute top of the stack).
+ * 'mb_info' reads EBX (Pushed 1st, sitting directly underneath EAX as a raw RAM pointer).
+ */
+void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     /* Code-Update until the next ----> , (note: this is an old code used for testing, it's commented out and not deleted to make it suitable to learning and decoding.)
     char* vga_buff=(char*)0xb8000; //a pointer called 'vga_buff' at memory address 0xB8000. motherboard is physically wired so that anything written to 0xB8000 goes straight .
     // into the video card's memory instead of regular RAM. We use (char*) to tell the compiler: "Treat this raw memory address as a row of text character boxes."
@@ -17,12 +24,18 @@ void kernel_main() {
     // The hex code 0x0F is split into two numbers: The first digit (0) tells the hardware to make the background pitch black.The second digit (F) tells the hardware to paint the letter 'K' in bright white.
     ---->*/
     vga_clear_screen();
+    if (grub_magic_number!=MULTIBOOT_NUMBER_CHECK) { //checking hardcoded hex value defined by the Free Software Foundation.
+        vga_print("FATAL ERROR: Invalid Multiboot Magic Number.\n");
+        return; // Halt the kernel
+    }
     vga_print("Hello from the NG-OS Kernel!\n");
     vga_print("System Initialized Successfully.\n");
+    vga_print("Multiboot check passed. GRUB is online.\n");
+
     //vga_hex_print(0x1BADB002); //translates a raw 32-bit number into readable text by slicing it into 4-bit chunks. Uses a bitwise mask and right-shifts to decode digits right-to-left before printing via VGA.
     // for more details check vga.c for vga_hex_print.
 
-    idt_init();
+    //idt_init();
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
