@@ -2,7 +2,7 @@
 
 ; MULTIBOOT CONSTANTS
 MULTIBOOT_NUM equ 0x1BADB002 ;Magic number GRUB explicitly scans for, This is a hardcoded hex value defined by the Free Software Foundation. GRUB sees this, it stops and says, "Wait, this might be a kernel."
-MULTIBOOT_FLAG equ 0x03 ;
+MULTIBOOT_FLAGS equ 0x03 ;
 MULTIBOOT_CHECKSUM equ -(MULTIBOOT_NUM + MULTIBOOT_FLAGS) ;Must equal 0 when added together
 ;0x1BADB002 could just randomly appear in a normal text file or image. To prove it is intentional, the Multiboot standard demands a mathematical checksum.
 
