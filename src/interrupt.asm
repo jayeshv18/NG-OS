@@ -31,6 +31,21 @@ call timer_handler_main ;run our C code)
 popad ;restore the CPU state
 iret ;return from the interrupt
 
+global gdt_flush
+gdt_flush:
+mov eax, [esp+4]  ; Get the pointer passed from the C function
+lgdt [eax]        ; Load the new GDT into the CPU
+
+mov ax, 0x10      ; 0x10 is the Data Segment (Index 2)
+mov ds, ax        ; Reload all data segment registers
+mov es, ax
+mov fs, ax
+mov gs, ax
+mov ss, ax
+jmp 0x08:.flush   ; Force a Far Jump to the Code Segment (0x08)
+.flush:
+ret               ; Return cleanly back to C
+
 
 
 

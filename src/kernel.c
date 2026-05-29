@@ -1,6 +1,8 @@
 #include "include/vga.h"
 #include "include/idt.h"
 #include "include/multiboot.h"
+#include "include/gdt.h"
+
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
  *But we are the operating system. There is nothing to return to!
@@ -35,7 +37,13 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     //vga_hex_print(0x1BADB002); //translates a raw 32-bit number into readable text by slicing it into 4-bit chunks. Uses a bitwise mask and right-shifts to decode digits right-to-left before printing via VGA.
     // for more details check vga.c for vga_hex_print.
 
-    //idt_init();
+    vga_print("Building GDT...\n");
+    gdt_init();  //must be called before idt
+    vga_print("GDT Loaded Successfully!\n");
+
+    vga_print("Building IDT...\n");
+    idt_init(); //must be called after gdt
+    vga_print("IDT Initialized. Hardware interrupts active.\n");
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
