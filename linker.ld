@@ -61,4 +61,11 @@ SECTIONS
         *(COMMON)
         *(.bss)
     }
+
+    /* * 7. THE KERNEL END MARKER (NEW)
+         * We drop a symbol right here at the absolute end of all our code.
+         * The C code will use this symbol as the safe starting address to build
+         * the PMM Bitmap so we don't accidentally overwrite our own operating system.
+         */
+        _kernel_end = .;
 }
