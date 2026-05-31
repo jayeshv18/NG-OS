@@ -3,6 +3,9 @@
 #include "include/multiboot.h"
 #include "include/gdt.h"
 #include "include/memory.h"
+#include "include/pmm.h"
+//we declare that this symbol exists outside of our C code (in the linker script)
+extern uint32_t _kernel_end;
 
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
@@ -46,7 +49,28 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     idt_init(); //must be called after gdt
     vga_print("IDT Initialized. Hardware interrupts active.\n");
 
+    //we get the physical memory address of the symbol using the Address-Of operator in the last of linker.ld
+    uint32_t end_address=(uint32_t)&_kernel_end;
+    //add lower and upper memory (in KB) and multiply by 1024 to get total Bytes
+    uint32_t total_ram_size = (mb_info->mem_lower + mb_info->mem_upper) * 1024;
+
+    vga_print("Building Physical Memory Manager...\n");
+    //we pass that safe address into our PMM
+    pmm_init(end_address, total_ram_size); //_kernel_end is a symbol created by the linker, not a real C variable, we must use & here to get the raw physical address the linker assigned to it.
+    vga_print("PMM Initialized. All blocks locked.\n");
+
+    vga_print("Scanning BIOS Memory Map...\n");
     parse_memory_map(mb_info); //read hardware mem
+
+    vga_print("Total RAM Blocks (4KB): ");
+    vga_print_dec(pmm_get_total_blocks());
+    vga_print("\nLocked Blocks: ");
+    vga_print_dec(pmm_get_used_blocks());
+    vga_print("\nFree Blocks: ");
+    vga_print_dec(pmm_get_total_blocks() - pmm_get_used_blocks());
+
+
+
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,

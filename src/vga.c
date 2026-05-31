@@ -77,4 +77,27 @@ void vga_print_hex_64(uint64_t num) { //this function uses bitwise operations to
     vga_print("0x");//prefix
     vga_hex_print(high);
     vga_hex_print(low);
+}
+
+void vga_print_dec(uint32_t num) {
+    if (num==0) {
+        vga_print("0");
+        return;
     }
+    char buffer[11]; //max 32-bit integer is 10 digits + null terminator
+    int i=0;
+
+    //extract digits in reverse order
+    while (num>0) {
+        buffer[i]=(num%10)+'0'; //convert math number to ASCII character
+        num=num/10;
+        i++;
+    }
+
+    while (i>0) {
+        i--;
+        //way to print one char at a time since we only have string printing
+        char single_char[2]={buffer[i],'\0'};
+        vga_print(single_char);
+    }
+}

@@ -1,6 +1,7 @@
 #include "include/memory.h"
 #include "include/multiboot.h"
 #include "include/vga.h"
+#include "include/pmm.h"
 
 // we need to parse/read the map of RAM which we got from multiboot.h & BIOS
 void parse_memory_map(void* mb_info_ptr) {
@@ -50,6 +51,11 @@ void parse_memory_map(void* mb_info_ptr) {
         //type
         if (mmap->type == 1) {
             vga_print(" | TYPE: AVAILABLE\n");
+            uint64_t start_address = mmap->addr;//where does this chunk of available RAM start?
+            uint64_t end_address = mmap->addr + mmap->len; //where does this chunk end? (Start + Length)
+            for (uint64_t current_addr = start_address; current_addr < end_address; current_addr += 4096) {
+                pmm_free_memory( (uint32_t)current_addr );
+            }
         }else {
             vga_print(" | TYPE: RESERVED\n");
         }
