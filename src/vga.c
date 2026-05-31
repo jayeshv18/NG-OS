@@ -48,7 +48,7 @@ void vga_print(const char* str) {
 
 }
 
-void vga_hex_print(uint32_t num){
+void vga_hex_print(uint32_t num) {
     //32-bit hex number has exactly 8 digits.
     char hex_str[11]="0x00000000"; //The 11 is for 0x, the 8 digits, and the \0 null terminator
     char* hex_digits = "0123456789ABCDEF"; //array lookup
@@ -66,6 +66,15 @@ void vga_hex_print(uint32_t num){
         num >>= 4; // Before shift: 0100 1010 (0x4A), After shift:  0000 0100 because the other half is also need to be decoded.
     }
     vga_print(hex_str); //hand the finished string to our existing VGA print driver
-
-
 }
+void vga_print_hex_64(uint64_t num) { //this function uses bitwise operations to slice the uint64_t into two uint32_t pieces (a "high" half and a "low" half).
+    //this provides a precise 32bit without lingering nums.
+    uint32_t high=(uint32_t)(num>>32); //the first 32 bits are shifted to the lower side and the lower side is complete removed, so that the higher 32 gets space to shift.
+    uint32_t low=(uint32_t)(num&0xFFFFFFFF); //0xFFFFFFFF means a solid wall of thirty-two 0s on the left, and thirty-two 1s on the right.
+        //bitwise AND helps to completely remove the high 32 and only keep the lower 32.
+
+    //printing the high half, then immediately print the low half, because we don't print a newline (\n) between them, they will appear on the screen as one massive, continuous 64-bit hex number!
+    vga_print("0x");//prefix
+    vga_hex_print(high);
+    vga_hex_print(low);
+    }
