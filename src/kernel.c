@@ -2,6 +2,7 @@
 #include "include/idt.h"
 #include "include/multiboot.h"
 #include "include/gdt.h"
+#include "include/memory.h"
 
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
@@ -14,7 +15,7 @@
 //because the x86 stack operates on a Last-In, First-Out (LIFO) basis, our C function will read the parameters in the exact opposite order they were pushed.
 /*
  * 'grub_magic_number' reads EAX (Pushed 2nd, sitting at the absolute top of the stack).
- * 'mb_info' reads EBX (Pushed 1st, sitting directly underneath EAX as a raw RAM pointer).
+ * 'mb_info' reads EBX (Pushed 1st, sitting directly underneath EAX as a raw RAM pointer). contains the physical address of GRUB's Memory Map
  */
 void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     /* Code-Update until the next ----> , (note: this is an old code used for testing, it's commented out and not deleted to make it suitable to learning and decoding.)
@@ -44,6 +45,8 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     vga_print("Building IDT...\n");
     idt_init(); //must be called after gdt
     vga_print("IDT Initialized. Hardware interrupts active.\n");
+
+    parse_memory_map(mb_info); //read hardware mem
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,

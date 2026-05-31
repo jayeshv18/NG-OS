@@ -36,7 +36,7 @@ build/%.o: src/%.c
 
 #Stitch all the .o files together into one final kernel.bin file.
 #The order here doesn't strictly matter because linker.ld enforces the layout.
-build/kernel.bin: build/boot.o build/interrupt.o build/kernel.o build/idt.o build/keyboard.o build/timer.o build/vga.o build/gdt.o
+build/kernel.bin: build/boot.o build/interrupt.o build/kernel.o build/idt.o build/keyboard.o build/timer.o build/vga.o build/gdt.o build/memory.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
 
@@ -52,7 +52,7 @@ build/ng-os.iso: build/kernel.bin
 
 run: build/ng-os.iso
 	# Launch QEMU with a virtual CD-ROM drive instead of a raw hard drive
-	qemu-system-i386 -cdrom build/ng-os.iso
+	qemu-system-i386 -cdrom build/ng-os.iso -m 2G
 
 clean:
 	rm -rf build/*
