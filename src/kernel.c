@@ -62,6 +62,14 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     vga_print("Scanning BIOS Memory Map...\n");
     parse_memory_map(mb_info); //read hardware mem
 
+    //security bug fixed...
+    /*
+     *the BIOS usually marks the first 640KB as "Available", but address 0x0
+     *contains the legacy Interrupt Vector Table. We lock it manually so
+     *pmm_alloc_block() never returns a NULL pointer.
+    */
+    pmm_lock_memory(0x0); //lock the 0x0 block to know more about it read at pmm.c
+
     vga_print("Total RAM Blocks (4KB): ");
     vga_print_dec(pmm_get_total_blocks());
     vga_print("\nLocked Blocks: ");
@@ -69,7 +77,29 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     vga_print("\nFree Blocks: ");
     vga_print_dec(pmm_get_total_blocks() - pmm_get_used_blocks());
 
+    vga_print("\n--- ALLOCATOR TEST ---\n");
+    uint32_t block1 = pmm_alloc_block();
+    vga_print("Allocated Block 1 at: ");
+    vga_print_hex_64(block1); // Remember our 64-bit print tool!
+    vga_print("\n");
 
+    uint32_t block2 = pmm_alloc_block();
+    vga_print("Allocated Block 2 at: ");
+    vga_print_hex_64(block2);
+    vga_print("\n");
+
+    vga_print("Freeing Block 1...\n");
+    pmm_free_memory(block1);
+
+    uint32_t block3 = pmm_alloc_block();
+    vga_print("Allocated Block 3 at: ");
+    vga_print_hex_64(block3);
+    vga_print("\n");
+
+    vga_print("\n--- FINAL DASHBOARD ---\n");
+    vga_print("Locked Blocks: ");
+    vga_print_dec(pmm_get_used_blocks());
+    vga_print("\n-----------------------\n");
 
 
     /*
