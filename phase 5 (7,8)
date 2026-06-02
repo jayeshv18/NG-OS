@@ -1,0 +1,124 @@
+The Allocator (Giving out the RAM)
+Right now, your PMM can keep track of what is free and what is used. It acts like a giant ledger.
+But if a C program actually comes up to the OS and says, "Hey, I need 3 blocks of RAM to store this user's password," your OS currently has no way to search the ledger, find 3 contiguous free blocks, lock them, and hand the addresses back to the program.
+In user-space, this is what happens when you call malloc(). In kernel-space, we call it pmm_alloc_block().
+
+To build this, we have to write a search algorithm that scans our 16,384-integer array, looks for the first bit that is a 0, flips it to a 1, and mathematically reverse-engineers that bit's location back into a physical memory address (like 0x105000) to give to the program.
+To answer the question from the end of Phase 6: No, we do not check every single bit one by one. If you write a standard for loop that checks 524,288 individual bits every time a program asks for memory, your operating system will lag every time you move the mouse.
+We are going to use the Fast-Skip Bitwise Trick.
+
+Our ledger (pmm_bitmap) is an array of 32-bit integers.
+If an integer is exactly equal to 0xFFFFFFFF, it means every single one of its 32 bits is a 1 (all 32 blocks are currently in use).
+
+Instead of checking bits, we check the entire integer at once.
+We read pmm_bitmap[0]. Is it 0xFFFFFFFF? Yes. Skip it. (We just bypassed 32 checks in a single CPU clock cycle).
+We read pmm_bitmap[1]. Is it 0xFFFFFFFF? Yes. Skip it.
+We read pmm_bitmap[2]. Is it 0xEFFFFFFF? Wait—that isn't full! There is at least one 0 hiding inside this integer.
+Now we slow down and use a tiny inner loop (0 to 31) to test the bits of this specific integer to find exactly which one is the 0.
+
+
+--------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
