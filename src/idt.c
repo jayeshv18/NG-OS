@@ -3,6 +3,7 @@
 
 extern void keyboard_handler(); //assembly stub (function) so C knows it exists.
 extern void timer_handler();
+extern void isr14();
 
 idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -82,7 +83,7 @@ void idt_init(void) {
     for (int i = 0; i < 256; i++) {
         idt_set_gate(i,0,0,0); //clean the ram if any garbage left by previous storing data.
     }
-
+    idt_set_gate(14,(uint32_t)isr14,0x08,0x8E);
     idt_set_gate( 32, (uint32_t)timer_handler, 0x08, 0x8E); //registering the timer handler at index 32 (0x20)
     idt_set_gate(33, (uint32_t)keyboard_handler, 0x08, 0x8E); //registering the keyboard interrupt handler at index 33 (0x21)
 
