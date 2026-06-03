@@ -4,6 +4,7 @@
 #include "include/gdt.h"
 #include "include/memory.h"
 #include "include/pmm.h"
+#include "include/paging.h"
 //we declare that this symbol exists outside of our C code (in the linker script)
 extern uint32_t _kernel_end;
 
@@ -101,6 +102,12 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     vga_print_dec(pmm_get_used_blocks());
     vga_print("\n-----------------------\n");
 
+    paging_init();
+    vga_print("\n--- TRIGGERING INTENTIONAL PAGE FAULT ---\n");
+    // Create a pointer to the 2.5 Gigabyte mark
+    uint32_t* trap_pointer = (uint32_t*)0xA0000000;
+    // Attempt to write the number 5 into unmapped Virtual Memory
+    *trap_pointer = 5;
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,

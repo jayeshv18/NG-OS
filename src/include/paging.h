@@ -21,5 +21,5 @@ typedef struct {
 // [ Top 20 Bits: Physical Address of a Page Table ] + [ Bottom 12 Bits: Security Flags ]
  uint32_t entries[1024];
 } page_directory; //array of 1024 integers (Each integer holds the physical address of a Page Table + 12 flags).
-
+void paging_init();
 #endif

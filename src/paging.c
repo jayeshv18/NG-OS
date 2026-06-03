@@ -88,8 +88,26 @@ void paging_init() {
     vga_print("Paging Active. We are running in Virtual Memory.\n");
 }
 
+// to handle the pagefaults...
+//our assembly stub (isr14) has safely caught the CPU and handled the stack, we need to write the C function that it calls: page_fault_handler.
+//when the CPU throws Exception 14, it takes the exact Virtual Address that caused the crash and physically locks it inside a special CPU register called CR2.
+//we need to read CR2, print the address to the screen using your VGA drivers, and halt the system so we can read the telemetry.
+void page_fault_handler() {
+    uint32_t fault_address;
+    //reading the cr2 reg to find the exact address
+    __asm__ volatile ("mov %%cr2, %0" : "=r" (fault_address)); // "%% says the complier this is an actual cpu register" , %0 is a placeholder : A placeholder representing the first variable listed in the output operands (which is faulting_address)
+    //=r: Tells the compiler to automatically choose any available general-purpose CPU register (like eax or rbx) to temporarily hold the data, and write-only (=) into the variable.
 
+    vga_print("\nPAGE FAULT DETECTED\nSystem attempted to access unmapped address:");
+    vga_print_hex_64(fault_address);
+    vga_print("\n");
 
+    //halt the system so that the kernel can fetch the error and allocate new address
+    vga_print("SYSTEM HALTED.\n");
+    for (;;) {
+        __asm__ volatile ("hlt");
+    }
+}
 
 /* basic paging explanation.
 imagine an apartment building (Physical RAM). It has physical addresses: Apartment 100, Apartment 101, Apartment 102.
