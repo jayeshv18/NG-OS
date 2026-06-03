@@ -10,8 +10,10 @@
 section .text
 extern timer_handler_main
 extern keyboard_handler_main
+extern page_fault_handler
 global timer_handler
 global keyboard_handler ;need to make our assembly stub (function) available to our C code (for the IDT setup)
+global isr14
 bits 32
 
 keyboard_handler:
@@ -46,10 +48,28 @@ jmp 0x08:.flush   ; Force a Far Jump to the Code Segment (0x08)
 .flush:
 ret               ; Return cleanly back to C
 
+;page fault interrupt handle
+extern page_fault_handler
+global isr14
+isr14:
+;normal interrupts (like our keyboard driver), the CPU simply jumps to the code.
+;but for a Page Fault, Intel's architecture automatically pushes a 32-bit Error Code onto the stack before it jumps to our handler.
+pushad ;copy of the register
+call page_fault_handler ;jump to the c logic
+popad ; restore the cpu regs
+add esp,4 ;extended stack pointer that always points to the absolute top.
+;when the CPU puts a new plate on the stack (push), the memory address gets smaller (ESP goes down). When the CPU takes a plate off the stack (pop), the memory address gets larger (ESP goes up).
+;when a normal hardware interrupt happens (like our keyboard), the CPU takes a snapshot of exactly where it was in our kernel code, pushes that return address onto the stack, and jumps to our handler.
+;when we call iret (Interrupt Return), the CPU pops that return address off the stack and goes back to work.
 
+;but Exception 14 (The Page Fault) is special.
+;because it's a fatal error, the Intel CPU is designed to push one extra onto the stack right before it jumps to your handler.
+;this extra plate is a 32-bit (4-byte) Error Code that contains technical details about why the page fault happened.
 
-
-
+;if we call iret right now, the CPU will reach for the top plate to find the Return Address. But the top plate is currently the Error Code! The CPU will read the error code, assume it is a memory address, jump to it, and instantly Triple Fault.
+;we must remove the Error Code plate from the stack. We could use pop eax to pull it off, but we don't actually care about the error code right now, and we don't want to corrupt the eax register.
+;we manually manipulate the laser pointer.By executing add esp, 4, we are mathematically adding 4 bytes to the Stack Pointer. Because the stack grows upside down, adding 4 moves the pointer "down" the stack, perfectly skipping over the 4-byte Error Code. We abandon the data, realigning the stack perfectly so iret can grab the real Return Address.
+iret
 
 
 
