@@ -44,8 +44,21 @@ void vga_print(const char* str) {
             vga_index++;
         }
         str++; // Move to the next text character pointer in RAM
+        //scroll logic
+        //if the cursor has fallen off the bottom of the screen (25 rows * 80 cols = 2000)
+        if (vga_index >= 2000) {
+            //shift the first 24 rows up by exactly one row (80 slots forward)
+            for (int i = 0; i < 24 * 80; i++) {
+                vga_buff[i] = vga_buff[i + 80];
+            }
+            //wipe the 25th row clean with blank spaces
+            for (int i = 24 * 80; i < 2000; i++) {
+                vga_buff[i] = (default_color << 8) | ' ';
+            }
+            //snap the cursor back to the beginning of the bottom row
+            vga_index = 24 * 80;
+        }
     }
-
 }
 
 void vga_hex_print(uint32_t num) {
@@ -101,3 +114,4 @@ void vga_print_dec(uint32_t num) {
         vga_print(single_char);
     }
 }
+

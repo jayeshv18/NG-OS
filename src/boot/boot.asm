@@ -37,6 +37,13 @@ push eax ;the eax register (contains GRUB's confirmation magic number).
 cli ;Disable hardware interrupts with cli (clear interrupt flag)
 call kernel_main
 
+;C code cannot run without a Stack. The stack is where local variables are stored.
+;The very first line mov esp, stack_top gives the C compiler a safe space in memory to work.
+;Immediately after that, we execute push ebx and push eax. This is critical
+;The CPU registers (EAX, EBX) are volatile. The moment the C code starts, it will overwrite those registers to do math.
+;By pushing them onto the stack before calling C, we are saving the Briefcase and the Password so C can read them as function arguments.
+
+
 ;if the kernel ever accidentally returns, put the CPU into a permanent freeze
 .hang:
 cli
