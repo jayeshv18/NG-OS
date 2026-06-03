@@ -100,14 +100,47 @@ void page_fault_handler() {
 
     vga_print("\nPAGE FAULT DETECTED\nSystem attempted to access unmapped address:");
     vga_print_hex_64(fault_address);
-    vga_print("\n");
+    vga_print("\nDynamically allocating physical memory...\n");
 
-    //halt the system so that the kernel can fetch the error and allocate new address
-    vga_print("SYSTEM HALTED.\n");
-    for (;;) {
-        __asm__ volatile ("hlt");
-    }
+    //asking for new pmm block
+    uint32_t new_physical_block=pmm_alloc_block();
+    //new mapper to link the crashed Virtual Address to the new block
+    map_page(fault_address, new_physical_block);
+    vga_print("Map fixed. Resuming execution.\n");
+
 }
+
+
+//automatic handling of the page fault exception 14 by kernel
+uint32_t map_page(uint32_t virtual_address, uint32_t physical_address) {
+    uint32_t directory_index=(virtual_address >> 22) & 0x3FF; //0x3FF because it is the hexadecimal representation of the binary number 1111111111, that isolates exactly 10 bits of data while wiping out everything else.
+    uint32_t table_index=(virtual_address >> 12) & 0x3FF;
+    if (!(kernel_directory->entries[directory_index]&1)) { //checks if Bit 0 is a 1
+        //if 0
+        uint32_t new_table_phy=pmm_alloc_block(); //bucket is empty! We must ask the PMM for a new physical block
+        page_table* new_table=(page_table*)new_table_phy; //cast it to our blueprint so we can clear it out
+        for (int i=0;i<1024;i++) { //clear the new Page Table
+            new_table->entries[i] =0x02; //Not Present, Read/Write
+        }
+        kernel_directory->entries[directory_index]=new_table_phy | 3; //link the brand new Page Table into the Directory bucket
+        //use | 3 to set Present and Read/Write flags
+        uint32_t table_phys_addr = kernel_directory->entries[directory_index] & ~0xFFF; //extract the physical address of the Page Table from the Directory
+        //We use '& ~0xFFF' to strip the 12 security flags off the bottom,
+        // leaving only the pure physical address.
+        page_table* table = (page_table*)table_phys_addr;
+        //the target Physical Address into the correct Table slot!
+        table->entries[table_index] = physical_address | 3;
+
+    }
+
+
+}
+
+
+
+
+
+
 
 /* basic paging explanation.
 imagine an apartment building (Physical RAM). It has physical addresses: Apartment 100, Apartment 101, Apartment 102.
