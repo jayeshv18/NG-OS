@@ -5,6 +5,7 @@
 #include "include/memory.h"
 #include "include/pmm.h"
 #include "include/paging.h"
+#include "include/heap.h"
 //we declare that this symbol exists outside of our C code (in the linker script)
 extern uint32_t _kernel_end;
 
@@ -103,11 +104,21 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     vga_print("\n-----------------------\n");
 
     paging_init();
-    vga_print("\n--- TRIGGERING INTENTIONAL PAGE FAULT ---\n");
-    // Create a pointer to the 2.5 Gigabyte mark
-    uint32_t* trap_pointer = (uint32_t*)0xA0000000;
-    // Attempt to write the number 5 into unmapped Virtual Memory
-    *trap_pointer = 5;
+    vga_print("\n--- INITIATING KERNEL HEAP ---\n");
+    heap_init();
+    vga_print("Heap Master Pointer aligned at Virtual 16MB.\n");
+
+    // Test 1: Ask for 50 bytes
+    void* ptr1 = kmalloc(50);
+    vga_print("Allocated 50 bytes. User Pointer 1: ");
+    vga_print_hex_64((uint32_t)ptr1);
+    vga_print("\n");
+
+    // Test 2: Ask for 100 bytes
+    void* ptr2 = kmalloc(100);
+    vga_print("Allocated 100 bytes. User Pointer 2: ");
+    vga_print_hex_64((uint32_t)ptr2);
+    vga_print("\n");
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
