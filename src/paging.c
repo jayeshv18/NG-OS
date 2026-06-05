@@ -21,7 +21,7 @@ void paging_init() {
     uint32_t directory_address=pmm_alloc_block(); //requesting a perfectly 4KB-aligned physical block from our allocator
     //security guard to check if we ran off ram...
     if (directory_address==0xFFFFFFFF) {
-        vga_print("FATAL OS ERROR: Out of physical memory for Page Directory!\n");
+        klog_err("FATAL OS ERROR: Out of physical memory for Page Directory!\n");
         for (;;) {
             __asm__ volatile("hlt");//system halt to prevent crash
         }
@@ -36,7 +36,7 @@ void paging_init() {
         // Bit 2 (User/Supervisor) = 0 (Ring 0 Kernel Only)
         kernel_directory->entries[i] = 0x00000002;
     }
-    vga_print("Page Directory aligned & initialized!\n");
+    klog_ok("Page Directory aligned & initialized!\n");
 
     //identity mapping
     /*
@@ -47,7 +47,7 @@ void paging_init() {
 
     uint32_t page_table_address=pmm_alloc_block();
     if (page_table_address==0xFFFFFFFF) {
-        vga_print("FATAL OS ERROR: Out of physical memory for Page Table!\n");
+        klog_err("FATAL OS ERROR: Out of physical memory for Page Table!\n");
         for (;;) {
             __asm__ volatile("hlt");
         }
@@ -67,7 +67,7 @@ void paging_init() {
     kernel_directory->entries[0]=page_table_address | 3;
 
     //we need ti turn on the MMU, which is controlled by CR3 register and it can be turned on using asm.
-    vga_print("Flipping MMU Switch. Entering the Matrix...\n");
+    vga_print("Flipping MMU Switch.\n");
     //load CR3 and flip CR0
     __asm__ volatile (
         //move the physical address of our Directory into EAX
@@ -85,7 +85,7 @@ void paging_init() {
         : "eax"
     );
 
-    vga_print("Paging Active. We are running in Virtual Memory.\n");
+    klog_ok("Paging Active.\n");
 }
 
 // to handle the pagefaults...
@@ -98,7 +98,7 @@ void page_fault_handler() {
     __asm__ volatile ("mov %%cr2, %0" : "=r" (fault_address)); // "%% says the complier this is an actual cpu register" , %0 is a placeholder : A placeholder representing the first variable listed in the output operands (which is faulting_address)
     //=r: Tells the compiler to automatically choose any available general-purpose CPU register (like eax or rbx) to temporarily hold the data, and write-only (=) into the variable.
 
-    vga_print("\nPAGE FAULT DETECTED\nSystem attempted to access unmapped address:");
+    klog_err("\nPAGE FAULT DETECTED\nSystem attempted to access unmapped address:");
     vga_print_hex_64(fault_address);
     vga_print("\nDynamically allocating physical memory...\n");
 

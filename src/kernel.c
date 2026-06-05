@@ -36,32 +36,26 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
         vga_print("FATAL ERROR: Invalid Multiboot Magic Number.\n");
         return; // Halt the kernel
     }
-    vga_print("Hello from the NG-OS Kernel!\n");
-    vga_print("System Initialized Successfully.\n");
-    vga_print("Multiboot check passed. GRUB is online.\n");
+
 
     //vga_hex_print(0x1BADB002); //translates a raw 32-bit number into readable text by slicing it into 4-bit chunks. Uses a bitwise mask and right-shifts to decode digits right-to-left before printing via VGA.
     // for more details check vga.c for vga_hex_print.
 
-    vga_print("Building GDT...\n");
     gdt_init();  //must be called before idt
-    vga_print("GDT Loaded Successfully!\n");
+    klog_ok("GDT Loaded Successfully!\n");
 
-    vga_print("Building IDT...\n");
     idt_init(); //must be called after gdt
-    vga_print("IDT Initialized. Hardware interrupts active.\n");
+    klog_ok("IDT Initialized. Hardware interrupts active.\n");
 
     //we get the physical memory address of the symbol using the Address-Of operator in the last of linker.ld
     uint32_t end_address=(uint32_t)&_kernel_end;
     //add lower and upper memory (in KB) and multiply by 1024 to get total Bytes
     uint32_t total_ram_size = (mb_info->mem_lower + mb_info->mem_upper) * 1024;
 
-    vga_print("Building Physical Memory Manager...\n");
     //we pass that safe address into our PMM
     pmm_init(end_address, total_ram_size); //_kernel_end is a symbol created by the linker, not a real C variable, we must use & here to get the raw physical address the linker assigned to it.
-    vga_print("PMM Initialized. All blocks locked.\n");
+    klog_ok("PMM Initialized.\n");
 
-    vga_print("Scanning BIOS Memory Map...\n");
     parse_memory_map(mb_info); //read hardware mem
 
     //security bug fixed...
@@ -72,61 +66,20 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     */
     pmm_lock_memory(0x0); //lock the 0x0 block to know more about it read at pmm.c
 
+    /*----> old code
     vga_print("Total RAM Blocks (4KB): ");
     vga_print_dec(pmm_get_total_blocks());
     vga_print("\nLocked Blocks: ");
     vga_print_dec(pmm_get_used_blocks());
     vga_print("\nFree Blocks: ");
     vga_print_dec(pmm_get_total_blocks() - pmm_get_used_blocks());
-
-    vga_print("\n--- ALLOCATOR TEST ---\n");
-    uint32_t block1 = pmm_alloc_block();
-    vga_print("Allocated Block 1 at: ");
-    vga_print_hex_64(block1); // Remember our 64-bit print tool!
-    vga_print("\n");
-
-    uint32_t block2 = pmm_alloc_block();
-    vga_print("Allocated Block 2 at: ");
-    vga_print_hex_64(block2);
-    vga_print("\n");
-
-    vga_print("Freeing Block 1...\n");
-    pmm_free_memory(block1);
-
-    uint32_t block3 = pmm_alloc_block();
-    vga_print("Allocated Block 3 at: ");
-    vga_print_hex_64(block3);
-    vga_print("\n");
-
-    vga_print("\n--- FINAL DASHBOARD ---\n");
-    vga_print("Locked Blocks: ");
-    vga_print_dec(pmm_get_used_blocks());
-    vga_print("\n-----------------------\n");
+    ---->*/
 
     paging_init();
-    vga_print("\n--- INITIATING KERNEL HEAP ---\n");
+    klog_ok("Paging Initialized.\n");
     heap_init();
-    vga_print("Heap Master Pointer aligned at Virtual 16MB.\n");
-    //Allocate three blocks to fragment the heap
-    void* ptr1 = kmalloc(50);
-    void* ptr2 = kmalloc(100);
-    void* ptr3 = kmalloc(200);
-    vga_print("Allocated 3 blocks.\n");
-    //Free the outer blocks (Leaving a Used block in the middle)
-    kfree(ptr1);
-    kfree(ptr3);
-    vga_print("Freed Block 1 and Block 3. Heap is now fragmented.\n");
-    //Free the middle block! This should trigger both Forward AND Backward coalescing simultaneously.
-    kfree(ptr2);
-    vga_print("Freed Block 2. Total Coalescing Triggered.\n");
-
-    //Proof: If coalescing worked perfectly, the entire heap is now one giant block again.
-    //If we ask for 4000 bytes, it should succeed and give us the original master address back!
-    void* massive_ptr = kmalloc(4000);
-    vga_print("Requested 4000 byte block. Pointer: ");
-    vga_print_hex_64((uint32_t)massive_ptr);
-    vga_print("\n");
-
+    klog_ok("Heap Initialized.\n");
+    os_greeting("NG-OS :)");
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,

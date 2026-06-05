@@ -3,7 +3,9 @@
 volatile uint16_t* vga_buff = (uint16_t*)0xb8000; //global pointer to the video memory
 uint16_t vga_index = 0; //global variable to track where the cursor is currently sitting on the screen
 static const uint8_t default_color = 0x0F; //White text (F) on Black background (0)
-
+static const uint8_t green_color = 0x0A;
+static const uint8_t red_color = 0x0C;
+static const uint8_t cyan_color = 0x03;
 /*
  *Clears the entire 80x25 text screen by writing directly to the video card's memory.
 *Because 'vga_buff' is a pointer aimed at the physical VGA address (0xB8000),
@@ -11,6 +13,7 @@ static const uint8_t default_color = 0x0F; //White text (F) on Black background 
 *to the graphics hardware, filling all 2000 cells with blank white-on-black spaces.
 *standard VGA screen is exactly 80 columns wide and 25 rows tall. 80 x 25 = 2000
 */
+
 
 void vga_clear_screen() {
     for (int i=0;i<=1999;i++) {
@@ -21,25 +24,26 @@ void vga_clear_screen() {
     vga_index=0; //reset our global vga_index back to 0 so the next time vga_print is called, it starts at the absolute top-left corner.
 }
 
+/* the code has been updated to introduce logging prefixes.
 void vga_print(const char* str) {
     while (*str != '\0') {
         if (*str == '\n') { //if the character is a newline (\n). If it is, calculate the next row
             vga_index = (vga_index / 80 + 1) * 80; //VGA screen is exactly 80 characters wide
-            /*
-             *vga_index / 80: Integer division drops the remainder entirely. 85 / 80 = 1.
-             *This tells us that we are on Row 1.+ 1: Moves our target to the next physical line. 1 + 1 = 2.
-             *we want Row 2.* 80: Multiplies by the screen width to find the starting index number of that new row. 2 * 80 = 160. which is the absolute beginning of the next line!
-             */
+
+             //vga_index / 80: Integer division drops the remainder entirely. 85 / 80 = 1.
+             //This tells us that we are on Row 1.+ 1: Moves our target to the next physical line. 1 + 1 = 2.
+             //we want Row 2.* 80: Multiplies by the screen width to find the starting index number of that new row. 2 * 80 = 160. which is the absolute beginning of the next line!
+
         }else {
             uint16_t colored_char=(default_color<<8)|*str;
-            /*
-             *16-bit pointer (uint16_t) writes 2 bytes at the same time
-             * default_color << 8: Take our color byte (like white-on-black: 0x0F, which is binary 00001111) and slide it 8 spots to the left.
-             * It becomes: [ 00001111 | 00000000 ]
-             *
-             * | (uint8_t)(*str): Drop our character byte (like 'A', which is binary 01000001) into the empty right side using a logical Bitwise OR (|).
-             * final joined result is: [ 00001111 | 01000001 ]
-             */
+
+             //16-bit pointer (uint16_t) writes 2 bytes at the same time
+             // default_color << 8: Take our color byte (like white-on-black: 0x0F, which is binary 00001111) and slide it 8 spots to the left.
+             // It becomes: [ 00001111 | 00000000 ]
+
+             // | (uint8_t)(*str): Drop our character byte (like 'A', which is binary 01000001) into the empty right side using a logical Bitwise OR (|).
+             // final joined result is: [ 00001111 | 01000001 ]
+
             vga_buff[vga_index] = colored_char;
             vga_index++;
         }
@@ -60,6 +64,8 @@ void vga_print(const char* str) {
         }
     }
 }
+*/
+
 
 void vga_hex_print(uint32_t num) {
     //32-bit hex number has exactly 8 digits.
@@ -115,3 +121,47 @@ void vga_print_dec(uint32_t num) {
     }
 }
 
+void vga_print_color(const char* str, uint8_t color) {
+    while (*str != '\0') {
+        if (*str == '\n') {
+            vga_index = (vga_index / 80 + 1) * 80;
+        }else {
+            uint16_t colored_char=(color<<8)|*str;
+            vga_buff[vga_index] = colored_char;
+            vga_index++;
+        }
+        str++;
+        if (vga_index >= 2000) {
+            //shift the first 24 rows up by exactly one row (80 slots forward)
+            for (int i = 0; i < 24 * 80; i++) {
+                vga_buff[i] = vga_buff[i + 80];
+            }
+            //wipe the 25th row clean with blank spaces
+            for (int i = 24 * 80; i < 2000; i++) {
+                vga_buff[i] = (color << 8) | ' ';
+            }
+            //snap the cursor back to the beginning of the bottom row
+            vga_index = 24 * 80;
+        }
+    }
+}
+void vga_print(const char* str) { //wrapper function
+    vga_print_color(str, default_color);
+}
+
+void klog_ok(const char* message) {
+    vga_print_color("[OK] ", green_color); // Prints prefix in Green
+    vga_print_color(message, default_color); // Prints message in White
+    vga_print_color("\n", default_color);    // Newline
+}
+
+void klog_err(const char* message) {
+    vga_print_color("[!] ", red_color);    // Prints prefix in Red
+    vga_print_color(message, default_color); // Prints message in White
+    vga_print_color("\n", default_color);    // Newline
+}
+
+void os_greeting(const char* message) {
+    vga_print_color(message, cyan_color); // Prints message in White
+    vga_print_color("\n", default_color);    // Newline
+}
