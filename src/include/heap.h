@@ -43,4 +43,5 @@ typedef struct header_name {
 }heap_header;
 void heap_init();
 void* kmalloc(uint32_t requested_size);
+void kfree(void* ptr);
 #endif

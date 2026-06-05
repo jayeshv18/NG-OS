@@ -107,18 +107,26 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     vga_print("\n--- INITIATING KERNEL HEAP ---\n");
     heap_init();
     vga_print("Heap Master Pointer aligned at Virtual 16MB.\n");
-
-    // Test 1: Ask for 50 bytes
+    //Allocate three blocks to fragment the heap
     void* ptr1 = kmalloc(50);
-    vga_print("Allocated 50 bytes. User Pointer 1: ");
-    vga_print_hex_64((uint32_t)ptr1);
+    void* ptr2 = kmalloc(100);
+    void* ptr3 = kmalloc(200);
+    vga_print("Allocated 3 blocks.\n");
+    //Free the outer blocks (Leaving a Used block in the middle)
+    kfree(ptr1);
+    kfree(ptr3);
+    vga_print("Freed Block 1 and Block 3. Heap is now fragmented.\n");
+    //Free the middle block! This should trigger both Forward AND Backward coalescing simultaneously.
+    kfree(ptr2);
+    vga_print("Freed Block 2. Total Coalescing Triggered.\n");
+
+    //Proof: If coalescing worked perfectly, the entire heap is now one giant block again.
+    //If we ask for 4000 bytes, it should succeed and give us the original master address back!
+    void* massive_ptr = kmalloc(4000);
+    vga_print("Requested 4000 byte block. Pointer: ");
+    vga_print_hex_64((uint32_t)massive_ptr);
     vga_print("\n");
 
-    // Test 2: Ask for 100 bytes
-    void* ptr2 = kmalloc(100);
-    vga_print("Allocated 100 bytes. User Pointer 2: ");
-    vga_print_hex_64((uint32_t)ptr2);
-    vga_print("\n");
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,

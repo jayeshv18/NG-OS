@@ -87,7 +87,7 @@ void vga_print_hex_64(uint64_t num) { //this function uses bitwise operations to
         //bitwise AND helps to completely remove the high 32 and only keep the lower 32.
 
     //printing the high half, then immediately print the low half, because we don't print a newline (\n) between them, they will appear on the screen as one massive, continuous 64-bit hex number!
-    vga_print("0x");//prefix
+    vga_print("");//prefix
     vga_hex_print(high);
     vga_hex_print(low);
 }

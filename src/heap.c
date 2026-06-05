@@ -58,3 +58,64 @@ void* kmalloc(uint32_t requested_size) {
     //If the while loop finishes and we get here, the heap is completely full!
     return 0;
 }
+
+void kfree(void* ptr) {
+    if (ptr==0) { //null value handling to prevent crash
+        return;
+    }
+    uint32_t raw_address = (uint32_t)ptr; //casting cause its a void* to avoid panics and errors
+    heap_header* header=(heap_header*)(raw_address-12); //rewind the procedure compared to the kmalloc
+    header->flags=1;//free
+    /*
+    [Free 50] -> [Free 100] -> [Used 200]
+    If a user calls kmalloc(120), our First-Fit search will look at the 50 (too small), look at the 100 (too small), and look at the 200 (used).
+    It will return NULL and crash the program—even though we have 150 bytes of free space sitting right next to each other!
+    */
+    if (header->next!=0 && header->next->flags==1) {
+            //we must make sure a neighbor actually exists (header->next != 0). If it does, we check if the neighbor is also free (header->next->flags == 1).
+            header->size= header->size+12+header->next->size; //current block gets bigger. How much bigger? It gains the size of the neighbor's data (header->next->size)
+            //reclaims the 12 bytes of the neighbor's header that we are about to destroy!
+            header->next=header->next->next;//our current block needs to point to wherever the neighbor used to point.
+    }
+
+    //backward search
+    //if we are the first block, there is nothing behind us, so we just skip the search!
+    if (header!=heap_first) {
+        heap_header* tracker=heap_first;
+        while (tracker->next!=header) { //want the loop to stop exactly one block before your current block.
+            tracker=tracker->next;
+        }
+        if (tracker->flags==1) {
+            //if it is free, the tracker block absorbs the header block! the tracker's size becomes its current size + 12 + your header's size.
+            tracker->size=tracker->size+12+header->size;
+            tracker->next=header->next;
+        }
+    }
+
+}
+
+
+/*
+The Starting Point (The Virtual 16MB Mark)
+When we ran heap_init(), we hardcoded the master pointer to point to the 16 Megabyte mark in Virtual Memory.
+Base Address: 0x1000000
+
+The First Cut: kmalloc(50)
+When our code asked for 50 bytes, the allocator found the massive 4,084-byte free chunk right at the beginning. It placed Header 1 directly at 0x1000000.
+The header takes up exactly 12 bytes.
+In hexadecimal, 12 is 0xC.
+Because we correctly coded the return statement as (void*)(tracker + 1) to skip the header, the OS calculated:
+0x1000000 + 0xC = 0x100000C.
+Logic confirmed: our user program gets memory starting safely after Header 1.
+
+The Second Cut: kmalloc(100)
+This is where the true dynamic splitting logic proves itself. our allocator had to forge a brand new header (Header 2) right after the 50 bytes we just allocated.
+Header 1 started at 0x1000000.
+Header 1 took up 12 bytes (0xC).
+The data took up 50 bytes. In hexadecimal, 50 is 0x32.
+Where does Header 2 begin? 0x1000000 + 0xC (Header) + 0x32 (Data) = 0x100003E.
+The allocator stamped a new 12-byte header at 0x100003E.
+To give the user the safe data pointer, it skipped Header 2:
+0x100003E + 0xC (12 bytes) = 0x100004A.
+Logic confirmed: our user program gets memory starting safely after Header 2.
+ */
