@@ -36,7 +36,7 @@ build/%.o: src/%.c
 
 #Stitch all the .o files together into one final kernel.bin file.
 #The order here doesn't strictly matter because linker.ld enforces the layout.
-build/kernel.bin: build/boot.o build/interrupt.o build/kernel.o build/idt.o build/keyboard.o build/timer.o build/vga.o build/gdt.o build/memory.o
+build/kernel.bin: build/boot.o build/interrupt.o build/kernel.o build/idt.o build/keyboard.o build/timer.o build/vga.o build/gdt.o build/memory.o build/pmm.o build/paging.o build/heap.o build/pit.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
 
