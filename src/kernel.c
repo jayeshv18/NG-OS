@@ -6,6 +6,7 @@
 #include "include/pmm.h"
 #include "include/paging.h"
 #include "include/heap.h"
+#include "include/pit.h"
 //we declare that this symbol exists outside of our C code (in the linker script)
 extern uint32_t _kernel_end;
 
@@ -46,6 +47,7 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
 
     idt_init(); //must be called after gdt
     klog_ok("IDT Initialized. Hardware interrupts active.\n");
+    pit_init(18);
 
     //we get the physical memory address of the symbol using the Address-Of operator in the last of linker.ld
     uint32_t end_address=(uint32_t)&_kernel_end;

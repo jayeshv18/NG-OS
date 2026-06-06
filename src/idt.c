@@ -2,7 +2,7 @@
 #include "include/io.h"
 
 extern void keyboard_handler(); //assembly stub (function) so C knows it exists.
-extern void timer_handler();
+extern void timer_stub();
 extern void isr14();
 
 idt_entry_t idt[256];
@@ -84,7 +84,13 @@ void idt_init(void) {
         idt_set_gate(i,0,0,0); //clean the ram if any garbage left by previous storing data.
     }
     idt_set_gate(14,(uint32_t)isr14,0x08,0x8E);
-    idt_set_gate( 32, (uint32_t)timer_handler, 0x08, 0x8E); //registering the timer handler at index 32 (0x20)
+    /* (important)
+    when we built the Page Fault handler (isr14). we didn't wire the IDT directly to the C function. we wired it to an assembly stub (isr14), and the assembly stub called the C function.
+    Why did we do that? Because when a hardware interrupt fires, the CPU pushes a bunch of sensitive registers onto the stack. If we jump straight into C, the C compiler doesn't know it's an interrupt.
+    It will execute its normal code, try to return, and instantly completely shatter the system stack, crashing the OS.
+    We need an assembly stub to cleanly catch the CPU, save its state, call the C function, and gracefully restore the CPU using the iret (Interrupt Return) instruction.
+     */
+    idt_set_gate( 32, (uint32_t)timer_stub, 0x08, 0x8E); //registering the timer handler at index 32 (0x20)
     idt_set_gate(33, (uint32_t)keyboard_handler, 0x08, 0x8E); //registering the keyboard interrupt handler at index 33 (0x21)
 
     /*

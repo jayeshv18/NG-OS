@@ -63,7 +63,7 @@ add esp,4 ;extended stack pointer that always points to the absolute top.
 ;when we call iret (Interrupt Return), the CPU pops that return address off the stack and goes back to work.
 
 ;but Exception 14 (The Page Fault) is special.
-;because it's a fatal error, the Intel CPU is designed to push one extra onto the stack right before it jumps to your handler.
+;because it's a fatal error, the Intel CPU is designed to push one extra onto the stack right before it jumps to our handler.
 ;this extra plate is a 32-bit (4-byte) Error Code that contains technical details about why the page fault happened.
 
 ;if we call iret right now, the CPU will reach for the top plate to find the Return Address. But the top plate is currently the Error Code! The CPU will read the error code, assume it is a memory address, jump to it, and instantly Triple Fault.
@@ -71,7 +71,13 @@ add esp,4 ;extended stack pointer that always points to the absolute top.
 ;we manually manipulate the laser pointer.By executing add esp, 4, we are mathematically adding 4 bytes to the Stack Pointer. Because the stack grows upside down, adding 4 moves the pointer "down" the stack, perfectly skipping over the 4-byte Error Code. We abandon the data, realigning the stack perfectly so iret can grab the real Return Address.
 iret
 
-
+global timer_stub
+extern timer_handler_main
+timer_stub:
+    pusha           ;save all general-purpose registers
+    call timer_handler_main ;call our C function
+    popa            ;restore all registers
+    iret            ;return from interrupt (crucial!)
 
 
 
