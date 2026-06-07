@@ -1,6 +1,7 @@
 Refer to this document when the execution stack breaks and you lose track of
 where you are in the memory initialization sequence.
 
+phases are to be updated.
 
 1. Environment & Bootstrapping: Escaping the BIOS
         We use the Limine bootloader (modern open-source bootloader designed mainly for hobby OS development) to handle the ugly firmware initialization.
