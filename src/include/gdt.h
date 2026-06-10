@@ -26,5 +26,28 @@ struct gdt_ptr_struct {
 typedef struct gdt_ptr_struct gdt_ptr_t; //alias name
 
 void gdt_init(void);
+
+
+//Task State Segment (TSS).
+//to survive an interrupt in Ring 3, we must give the CPU a TSS ledger. We only need one TSS for the entire operating system.
+//TSS hardware structure. It is 104 bytes long, but we actually only care about two variables: esp0 (the Ring 0 stack pointer) and ss0 (the Ring 0 segment).
+typedef struct tss_entry_struct {
+    uint32_t prev_tss;   //the previous TSS - if we used hardware task switching (we don't)
+    uint32_t esp0;       //the stack pointer to load when we change to kernel mode.
+    uint32_t ss0;        //the stack segment to load when we change to kernel mode.
+    uint32_t esp1;       //unused...
+    uint32_t ss1;
+    uint32_t esp2;
+    uint32_t ss2;
+    uint32_t cr3;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax, ecx, edx, ebx, esp, ebp, esi, edi;
+    uint32_t es, cs, ss, ds, fs, gs;
+    uint32_t ldt;
+    uint16_t trap;
+    uint16_t iomap_base;
+} __attribute__((packed)) tss_entry_t;
+
 #endif
 

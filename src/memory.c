@@ -2,6 +2,7 @@
 #include "include/multiboot.h"
 #include "include/vga.h"
 #include "include/pmm.h"
+void* memcpy(void* dest, const void* src, uint32_t n);
 
 // we need to parse/read the map of RAM which we got from multiboot.h & BIOS
 void parse_memory_map(void* mb_info_ptr) {
@@ -78,4 +79,13 @@ void parse_memory_map(void* mb_info_ptr) {
         */
     }
 
+}
+
+void* memcpy(void* dest, const void* src, uint32_t n) {
+    uint8_t* pdest = (uint8_t*)dest;
+    const uint8_t* psrc = (const uint8_t*)src;
+    for (uint32_t i = 0; i < n; i++) {
+        pdest[i] = psrc[i];
+    }
+    return dest;
 }

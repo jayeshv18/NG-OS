@@ -1,9 +1,11 @@
 #include "include/idt.h"
 #include "include/io.h"
+#include "include/vga.h"
 
 extern void keyboard_handler(); //assembly stub (function) so C knows it exists.
 extern void timer_stub();
 extern void isr14();
+extern void isr128();
 
 idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -24,6 +26,29 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags) 
     idt[num].isr_high = (base >> 16) & 0xFFFF; // The '& 0xFFFF' is a safety cast
 
 
+}
+//this struct perfectly maps to the stack built by isr_common_stub
+typedef struct registers {
+    uint32_t ds;                                     // Data segment selector
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by pusha.
+    uint32_t int_no, err_code;                       // Pushed by isr128.
+    uint32_t eip, cs, eflags, useresp, ss;           // Pushed by the CPU automatically.
+} registers_t;
+
+//the Master Interrupt Handler
+void isr_handler(registers_t* regs) {
+    //if the interrupt was our System Call (128 = 0x80)
+    if (regs->int_no == 128) {
+
+        //system calls use CPU registers to pass parameters!
+        //by Linux convention, EAX holds the "System Call Number"
+        if (regs->eax == 1) {
+            //syscall 1: Print Character
+            //let's assume EBX holds the character we want to print
+            char c = (char)regs->ebx;
+            vga_print_char_color(c, 0x0A); //call our Ring 0 VGA driver legally!
+        }
+    }
 }
 
 // The PIC sits on these hardware ports
@@ -92,6 +117,7 @@ void idt_init(void) {
      */
     idt_set_gate( 32, (uint32_t)timer_stub, 0x08, 0x8E); //registering the timer handler at index 32 (0x20)
     idt_set_gate(33, (uint32_t)keyboard_handler, 0x08, 0x8E); //registering the keyboard interrupt handler at index 33 (0x21)
+    idt_set_gate(128,(uint32_t)isr128,0xEE,0xEE);
 
     /*
      *0x8E = 10001110, 7th bit: Is this handler currently loaded in RAM and ready to use? 1 yes, 0 no.
@@ -112,6 +138,6 @@ void idt_init(void) {
     __asm__ __volatile__("lidt %0" : : "m" (idtp)); //find the exact physical memory address of idtp in RAM, and shove that memory address into the %0 placeholder
     //calculates that idtp is sitting at memory address 0x10500, and silently translates our C code into this pure, raw assembly instruction inside the final binary:
     //lidt [0x10500]
-    // Inline Assembly: Turn the CPU back on to intercept hardware device signals
-    __asm__ volatile("sti");
+
+
 }

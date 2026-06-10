@@ -18,6 +18,7 @@ page_directory* kernel_directory=0;
  */
 
 void paging_init() {
+
     uint32_t directory_address=pmm_alloc_block(); //requesting a perfectly 4KB-aligned physical block from our allocator
     //security guard to check if we ran off ram...
     if (directory_address==0xFFFFFFFF) {
@@ -53,6 +54,20 @@ void paging_init() {
         }
     }
     page_table* first_page_table = (page_table*)page_table_address;
+
+
+    // We are temporarily opening the ENTIRE kernel to User Mode
+    // just to test program_A. (This is a massive security hole we will fix later!)
+    for (int i=0;i<1024;i++) {
+        uint32_t phys_addr=i*4096;
+
+        // Supervisor Only
+        first_page_table->entries[i] = phys_addr | 3;
+    }
+
+    //link the Page Table into the Page Directory.
+    // CHANGED TO 7: Present (1), Read/Write (1), User (1)
+    kernel_directory->entries[0]=page_table_address | 3; // Also change the directory entry to 7!
 
     //fill the Page Table
     for (int i=0;i<1024;i++) {
@@ -98,8 +113,10 @@ void page_fault_handler() {
     __asm__ volatile ("mov %%cr2, %0" : "=r" (fault_address)); // "%% says the complier this is an actual cpu register" , %0 is a placeholder : A placeholder representing the first variable listed in the output operands (which is faulting_address)
     //=r: Tells the compiler to automatically choose any available general-purpose CPU register (like eax or rbx) to temporarily hold the data, and write-only (=) into the variable.
 
-    klog_err("\nPAGE FAULT DETECTED\nSystem attempted to access unmapped address:");
+    klog_err("PAGE FAULT DETECTED\nSystem attempted to access unmapped address:");
     vga_print_hex_64(fault_address);
+
+    /*
     vga_print("\nDynamically allocating physical memory...\n");
 
     //asking for new pmm block
@@ -107,7 +124,10 @@ void page_fault_handler() {
     //new mapper to link the crashed Virtual Address to the new block
     map_page(fault_address, new_physical_block);
     vga_print("Map fixed. Resuming execution.\n");
-
+*/
+    for(;;) {
+        __asm__ volatile("hlt");
+    }
 }
 
 
@@ -130,7 +150,19 @@ uint32_t map_page(uint32_t virtual_address, uint32_t physical_address) {
         page_table* table = (page_table*)table_phys_addr;
         //the target Physical Address into the correct Table slot!
         table->entries[table_index] = physical_address | 3;
+    }
+    else {
+        //TABLE ALREADY EXISTS.
+        //THE FIX: Upgrade the building's front door (Directory) to User Accessible!
+        //we use |= 7 (Bitwise OR-Equals) to keep the original physical address,
+        //but forcefully flip the bottom 3 security bits to 1 (Present, R/W, User).
+        kernel_directory->entries[directory_index] |= 7;
 
+        uint32_t table_phys_addr = kernel_directory->entries[directory_index] & ~0xFFF;
+        page_table* table = (page_table*)table_phys_addr;
+
+        // Map the physical address (Ring 3 Accessible: | 7)
+        table->entries[table_index] = physical_address | 7;
     }
 
 

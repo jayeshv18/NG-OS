@@ -79,15 +79,94 @@ timer_stub:
     popa            ;restore all registers
     iret            ;return from interrupt (crucial!)
 
+;privelage drop
+;need to take two parameters from C: the entry_point (where to jump) and the user_esp (where the new stack is).
+;we are writing a C-callable assembly function, the parameters are waiting on the current kernel stack at [ebp+8] and [ebp+12].
+global jump_to_usermode
+jump_to_usermode:
+push ebp
+mov ebp,esp
+;push ebp followed by mov ebp, esp, are known as the Function Prologue. They are the standard architectural glue that allows C and Assembly to talk to each other without destroying the system.
+;inside the CPU, ESP (Extended Stack Pointer) is the live, active laser pointer. It always points to the absolute top plate on the stack. Whenever we push, ESP automatically moves up. Whenever we pop, ESP automatically moves down.
+;because ESP is constantly bouncing around as our code runs, it is a terrible reference point. If we want to grab the first parameter passed from C, we might think it is at [esp+4]. But if we push a variable a microsecond later, that parameter is now suddenly at [esp+8]. It is like trying to measure a room with a tape measure that keeps changing its length.
+;EBP (Extended Base Pointer) is the solution. It acts as an immovable object
+;when our C code calls jump_to_usermode, the C function that called it was already using EBP as its own immovable object to keep track of its own variables.
+;if we just overwrite EBP, we will permanently blind the parent C function. So, the absolute first thing we do is push ebp. We physically save the parent's immovable object onto the stack so we can give it back later.
+;now that the parent's immovable object is safely locked away on the stack, we are free to use the EBP register.
+;we look at exactly where ESP is right now, and we copy that address into EBP.
+;EBP is now frozen. It acts as a perfectly still, immovable bookmark for the exact moment our function began.
+;because EBP never moves, we can use it to mathematically map out the stack perfectly, no matter how many times ESP bounces around later.
+;because of the C Calling Convention, the stack immediately after mov ebp, esp always looks exactly like this:
+;[ebp]       -> The parent's saved immovable object (which we just pushed).
+;[ebp + 4]   -> The Return Address (where to jump back to when the function finishes, pushed automatically by the CPU's call instruction).
+;[ebp + 8]   -> Parameter 1 (entry_point).
+;[ebp + 12]  -> Parameter 2 (user_esp).
+;by using ebp as our immovable object, we can confidently write mov ebx, [ebp+8] to grab our first C parameter, knowing it will always be mathematically sound.
+
+;grab parameters passed form c
+mov ebx, [ebp+8]  ; the entry_point (EIP)
+mov ecx, [ebp+12] ; the user_esp (Stack Pointer)
+; We need to update the data segment registers before the drop
+mov ax, 0x23; 0x23 is our User Data Selector
+mov ds, ax
+mov es, ax
+mov fs, ax
+mov gs, ax
+
+; push the 5-plate iret stack!
+push 0x23; 1. Push User Data Segment
+push ecx; 2. Push User Stack Pointer
+push 0x202; 3. Push EFLAGS (Interrupts On)
+push 0x1B; 4. Push User Code Segment
+push ebx; 5. Push Instruction Pointer (EIP)
+;drop
+iret ;CPU yanks the 5 plates and falls into Ring 3
+
+mov esp, ebp ;reset as it was
+pop ebp ; return back the immovable object back to the parent
+ret; back to c
+
+;tell the CPU hardware exactly which GDT entry holds the TSS this is done by ltr
+global tss_flush
+tss_flush:
+mov ax, 0x2B;index 5 in the GDT (5 * 8 = 40 = 0x28) | RPL 3 = 0x2B
+ltr ax;Load Task Register
+;violently jams 0x2B into the CPU's Task Register. The CPU now permanently knows exactly where to look when an interrupt fires in Ring 3.
+ret
+
+extern isr_handler ;this is the master C function we will write next
+isr_common_stub:
+pusha; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
+mov ax, ds; lower 16-bits of eax = ds.
+push eax; save the data segment descriptor
+mov ax, 0x10; load the Kernel Data Segment descriptor
+mov ds, ax
+mov es, ax
+mov fs, ax
+mov gs, ax
+
+push esp; pass the entire stack frame as a parameter to C!
+call isr_handler
+add esp, 4; clean up the parameter we pushed
+
+pop ebx; reload the original data segment descriptor
+mov ds, bx
+mov es, bx
+mov fs, bx
+mov gs, bx
+
+popa; pop edi,esi,ebp...
+add esp, 8; cleans up the pushed error code and pushed ISR number
+sti
+iret; pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
 
 
-
-
-
-
-
-
-
+global isr128
+isr128:
+cli; disable interrupts so we aren't interrupted while setting up the stack
+push 0; push a dummy error code (to keep the stack structure consistent with exceptions)
+push 128; push the Interrupt Number (0x80)
+jmp isr_common_stub ; jump to the massive save/restore logic above!
 
 
 

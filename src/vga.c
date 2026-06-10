@@ -86,6 +86,28 @@ void vga_hex_print(uint32_t num) {
     }
     vga_print(hex_str); //hand the finished string to our existing VGA print driver
 }
+
+void vga_print_char_color(char c, uint8_t color) {
+    if (c == '\n') {
+        vga_index = (vga_index / 80 + 1) * 80;
+    } else {
+        uint16_t colored_char = (color << 8) | c;
+        vga_buff[vga_index] = colored_char;
+        vga_index++;
+    }
+
+    //scroll logic if we hit the bottom of the screen
+    if (vga_index >= 2000) {
+        for (int i = 0; i < 24 * 80; i++) {
+            vga_buff[i] = vga_buff[i + 80];
+        }
+        for (int i = 24 * 80; i < 2000; i++) {
+            vga_buff[i] = (color << 8) | ' ';
+        }
+        vga_index = 24 * 80;
+    }
+}
+
 void vga_print_hex_64(uint64_t num) { //this function uses bitwise operations to slice the uint64_t into two uint32_t pieces (a "high" half and a "low" half).
     //this provides a precise 32bit without lingering nums.
     uint32_t high=(uint32_t)(num>>32); //the first 32 bits are shifted to the lower side and the lower side is complete removed, so that the higher 32 gets space to shift.

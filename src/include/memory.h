@@ -22,4 +22,5 @@ typedef struct multiboot_mmap_entry multiboot_mmap_t;
 
 //the function we gonna call from kernel
 void parse_memory_map(void* mb_info);
+void* memcpy(void* dest, const void* src, uint32_t size);
 #endif

@@ -10,4 +10,5 @@ void vga_print_color(const char* str, uint8_t color);
 void klog_ok(const char* message);
 void klog_err(const char* message);
 void os_greeting(const char* message);
+void vga_print_char_color(char c, uint8_t color);
 #endif
