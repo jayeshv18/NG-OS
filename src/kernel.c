@@ -47,7 +47,12 @@ void program_A_end() {}
 
 void program_B() {
     for (;;) {
-        vga_print_color("B", 0x0C);
+        __asm__ volatile (
+            "mov $1, %%eax\n"     // System Call Number 1 (Print)
+            "mov $'B', %%ebx\n"   // Parameter: The character 'B'
+            "int $0x80\n"         // The Drop into Ring 0
+            : : : "eax", "ebx"
+        );
         for(volatile uint32_t i=0; i<1000000; i++) {}
     }
 }
@@ -111,12 +116,51 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     klog_ok("Paging Initialized.\n");
     heap_init();
     klog_ok("Heap Initialized.\n");
-    //task_init(); //captures the current kernel into PID 1
-    //klog_ok("Task Initialized.\n");
+    task_init(); //captures the current kernel into PID 1
+    klog_ok("Task Initialized.\n");
+
     os_greeting("NG-OS :)");
 
-    //create_task(program_A); //forges the stack for A (PID 2)
-    //create_task(program_B); //forges the stack for B (PID 3)
+    uint32_t prog_a_page = (uint32_t)program_A & ~0xFFF;
+    map_page(prog_a_page, prog_a_page);
+    uint32_t prog_b_page = (uint32_t)program_B & ~0xFFF;
+    map_page(prog_b_page, prog_b_page);
+
+    /*
+    the hardware Memory Management Unit (MMU) does not understand individual
+    C functions or variables. It applies security rules to physical memory in
+    rigid 4,096-byte (4KB) chunks called "Pages".
+
+    right now, the entire Kernel (including program_A and program_B) is locked
+    to Ring 0 (Supervisor Only: | 3). If we drop into Ring 3 and the CPU tries
+    to read the first instruction of program_A, the MMU will instantly block it
+    and throw a Page Fault. Because our TSS isn't fully robust yet, that Page
+    fault cascades into a fatal Triple Fault.
+    we must slide exactly two keys under the door, telling the MMU to grant
+    ring 3 access to the specific 4KB blocks where these two programs live.
+
+    let's pretend program_A lives at memory address 0x001054A2.
+    we cannot unlock just 0x4A2. We must unlock the entire 4KB block starting at 0x00105000.
+    ~0xFFF is a bitwise mask. 0xFFF is twelve 1s. ~ flips it into a wall of 1s ending in twelve 0s.
+    by using the Bitwise AND (&) operator against the raw memory pointer, we violently
+    wipe out the bottom 12 bits of the address. This perfectly rounds the address down
+    to the absolute starting boundary of its 4KB physical page.
+    */
+
+    //5-Plate Ring 3 Stacks for our User Programs
+    create_task(program_A); //forges the stack for A (PID 2)
+    create_task(program_B); //forges the stack for B (PID 3)
+
+    extern page_directory* kernel_directory;
+    for(int i=0; i<1024; i++) {
+        kernel_directory->entries[i] |= 7;
+    }
+    // Flush the TLB
+    uint32_t cr3_val;
+    __asm__ volatile("mov %%cr3, %0" : "=r" (cr3_val));
+    __asm__ volatile("mov %0, %%cr3" :: "r" (cr3_val));
+
+    klog_ok("Multitasking Engine Engaged. Waiting for first tick...");
 
     /*
      *Operating System architecture, we must never turn on hardware interrupts (sti) until our kernel is 100% fully initialized and ready to handle them.
@@ -130,7 +174,7 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
      *but our kernel hasn't reached task_init() yet! Because task_init() hasn't run, the global variable current_task is NULL (Memory Address 0x0).
      *assembly function takes that 0x0, adds 4 to it, and writes the CPU's stack pointer into memory address 0x00000004. Then, it reads the "next" task from address 0x00000008 (which is just random garbage RAM), shoves that garbage into the esp register, pops garbage into the CPU, and Triple Faults.
      */
-   // __asm__ volatile("sti");
+    __asm__ volatile("sti"); //on interrupts so the CPU can hear the PIT timer
     /*
      *A normal program when our main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
      *which securely cleans up the memory and closes the process. Since we are writing the operating system itself, there is nothing left to return to.
@@ -139,29 +183,6 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
      *This safely puts the CPU into a low-power sleep state instead of spinning at 100% usage and generating heat.
      *If a hardware interrupt wakes the processor up, the loop immediately forces it back to sleep safely.
      */
-
-    // 1. Allocate and map the User Stack
-    uint32_t* user_stack_base = (uint32_t*)kmalloc(1024);
-    uint32_t stack_top = (uint32_t)(user_stack_base + 256);
-    uint32_t aligned_stack_addr = (uint32_t)user_stack_base & ~0xFFF;
-    map_page(aligned_stack_addr, aligned_stack_addr);
-
-    // 2. THE FIX: Grant Ring 3 access to the specific 4KB page holding program_A
-    uint32_t prog_page = (uint32_t)program_A & ~0xFFF;
-    map_page(prog_page, prog_page);
-
-    // 3. FLUSH THE TLB
-    uint32_t cr3_val;
-    __asm__ volatile("mov %%cr3, %0" : "=r" (cr3_val));
-    __asm__ volatile("mov %0, %%cr3" :: "r" (cr3_val));
-
-    klog_ok("User Space Mapped & TLB Flushed.");
-
-    // 4. The Drop
-    klog_ok("Initiating Ring 3 Privilege Drop...");
-    jump_to_usermode(program_A, stack_top);
-
-    vga_print("ERROR: CPU is still in Ring 0!\n");
 
 
     /*
