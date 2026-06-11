@@ -73,11 +73,21 @@ iret
 
 global timer_stub
 extern timer_handler_main
+;program_A is running. The PIT timer ticks. The CPU violently pauses program_A and jumps to timer_stub.
+;timer_stub executes pusha. At this exact microsecond, the entire state of program_A (its math, its code position, its flags) is perfectly frozen on the Kernel Stack.
+;timer_stub pushes esp to pass the location of that snapshot to C.
+;inside our C code, that location arrives as the variable current_esp.
 timer_stub:
-    pusha           ;save all general-purpose registers
+    pusha;dsave all general-purpose registers
+    ;we need a temporary safe space to hold the stack pointer
+    mov eax, esp
+    push eax ;onto the stack, this goes th=o the C function as the parameter
     call timer_handler_main ;call our C function
-    popa            ;restore all registers
-    iret            ;return from interrupt (crucial!)
+    ;when C returns, the value waiting at [esp] has been UPDATED by C!
+    pop esp;pull the perfectly safe, C-updated stack pointer directly into ESP!
+    ;in standard C convention, functions always return their answers inside the EAX register. Therefore, the brand new stack pointer we asked for is currently sitting in EAX.
+    popad;restore all registers of new task
+    iret;return from interrupt (crucial!)
 
 ;privelage drop
 ;need to take two parameters from C: the entry_point (where to jump) and the user_esp (where the new stack is).
