@@ -1,6 +1,8 @@
 #include "include/task.h"
 #include "include/heap.h"
 #include "include/paging.h"
+#include "include/vga.h"
+#include "include/gdt.h"
 task_t* current_task; //who is running right now?
 task_t* ready_queue; //who is waiting in line?
 uint32_t next_pid=1; //autoincrementing ID for new programs
@@ -33,13 +35,20 @@ the actual struct data (the ID, the ESP, the Next pointer) physically lives out 
 
 void task_init() {
     task_t* kernel_task=(task_t*)kmalloc(sizeof(task_t)); //Dynamic Allocation for memory using kmalloc.
-    kernel_task->esp=0;
-    kernel_task->id = next_pid;
-    next_pid++;
+    kernel_task->id = next_pid++;
+    kernel_task->esp=0;//scheduler will fill this in automatically on the first tick check the timer_stub and timer.c for more details
+    //kernel's virtual memory map is just the master directory
+    extern page_directory* kernel_directory;
+    kernel_task->page_dire = kernel_directory;
+
+    extern tss_entry_t tss_entry;
+    tss_entry.ss0 = 0x10; // Kernel Data Segment
+
+    //it is the only task, so it points to itself
     kernel_task->next=kernel_task; //next right back to kernel_task to create the circular loop.
     current_task=kernel_task;
     ready_queue=kernel_task;
-
+    klog_ok("Task Management Initialized");
 }
 
 /*
@@ -67,50 +76,76 @@ void task_init() {
 heap is only 1 page long (4KB). That is a tiny heap, but it is more than enough to run these two little test programs. We just need to give them smaller stacks.
 allocation from 4096 bytes to 1024 bytes (1KB).
 stack array is now only 1024 bytes long, you cannot advance the pointer by 1024 slots anymore! 1024 bytes divided by 4 bytes per slot = 256 slots.
+ */
 
+/*
+ * Dual Stack Architecture.
+ * when a program runs in Ring 3 (User Mode), it has its own private User Stack for its local variables. But what happens when the hardware timer ticks and forces the CPU to jump to your Ring 0 Kernel to handle the interrupt?
+ * the Kernel cannot use the User Stack to save its registers, because the Ring 3 program might have maliciously corrupted it.
+ * therefore, every single Ring 3 program actually requires two stacks:
+User Stack: Used while the program is running normally in Ring 3.
+Kernel Stack: Hidden away in Ring 0. Used exclusively to safely catch the CPU's registers when an interrupt fires.
  */
 
 void create_task(void (*entry_point)()) {
-    uint32_t* base_ptr_stack=(uint32_t*)kmalloc((1024)); //heap for 1024 bytes and cast it to a uint32_t*
-    //pointer is currently sitting at the bottom of the 4KB block (e.g., byte 0). Stacks grow downward from the top.
-    uint32_t* stack=base_ptr_stack+256; //stack is a 32-bit pointer (4 bytes per slot), 1024 bytes equals exactly 256 slots. We need to move our pointer to the absolute end of the array. Advance our stack pointer by exactly 256 slots.
-    stack--;
-    *stack=0x202; /*EFLAGS register is the CPU's master status panel. It tracks things like "did the last math operation equal zero?"
-    bit 9 of this register is the Interrupt Enable Flag (IF). If Bit 9 is a 1, the CPU listens to the PIT alarm clock. If Bit 9 is a 0, the CPU puts on noise-canceling headphones and ignores all hardware.
-    0x202 in binary is 0000 0010 0000 0010, 9th bit is 1.
-    If we forget to push 0x202 and accidentally push 0x000, our new program will wake up, put on the noise-canceling headphones,
-    ignore the PIT alarm clock, and our OS will permanently freeze. 0x202 guarantees the program can be paused later.
-    */
-    stack--;
-    *stack=0x08; /*think about the GDT structure.
-    *each GDT entry is exactly 8 bytes long, Entry 1 sits at memory address 8 (which is 0x08 in hex). By pushing 0x08 onto the stack,
-    *we are telling the CPU's memory management unit: "When you wake up this program, run it with the security clearance defined in GDT Entry 1."
-    * Entry 1 was our Kernel Code Segment (Ring 0, full root access).
-     */
-    stack--;
-    *stack=(uint32_t)entry_point;
-    /*
-    inside the CPU, the EIP register (Extended Instruction Pointer) physically aims at the exact next line of code the CPU needs to run.
-    when we pass a C function into our task creator (like void my_program()), entry_point holds the physical memory address of where my_program lives in RAM.
-    by putting this at the bottom of the iret frame, the iret instruction physically yanks this address off the stack, jams it into EIP, and the CPU instantly begins executing our C function.
-     */
+    //this is where the CPU will dump its registers when a hardware interrupt happens.
+    //it must be completely inaccessible to ring 3 programs to prevent tampering.
+    uint32_t* base_ptr_kernel_stack = (uint32_t*)kmalloc(1024);
+    //move the pointer to the absolute top of the 1KB array (256 slots * 4 bytes = 1024 bytes)
+    //stacks grow downwards, so we start at the top.
+    uint32_t* kernel_stack = base_ptr_kernel_stack+256;
+    //this is where the program will store its normal local variables (like 'int count = 5;').
+    uint32_t* base_ptr_user_stack = (uint32_t*)kmalloc(1024);
+    uint32_t* user_stack = base_ptr_user_stack + 256;
+    //by default, kmalloc pulls memory from the Heap, which is locked to Ring 0 (Supervisor).
+    //if the User Program tries to touch its own User Stack, the MMU will throw a Page Fault.
+    //we strip the bottom 12 bits to find the 4KB aligned physical address, and use map_page
+    // to explicitly unlock this specific chunk of memory for Ring 3.
+    uint32_t aligned_stack_addr = (uint32_t)base_ptr_user_stack & ~0xFFF;
+    map_page(aligned_stack_addr, aligned_stack_addr);
+    //we are manually placing 5 specific numbers onto the KERNEL stack.
+    //when the CPU executes the 'iret' (Interrupt Return) command later, it will violently
+    //rip these 5 plates off the stack and use them to launch the program.
+    kernel_stack--;
+    *kernel_stack = 0x23; //PLATE 1: User Data Segment (SS)
+    //tells the CPU: "Your data now belongs to Ring 3."
 
-    /*
-    * Remember our Assembly stub? Right before it calls iret, it calls popa.
-    popa is violently hungry. It is hardwired to reach into the stack and rip out exactly 8 chunks of 32-bit data to fill the general registers (EAX, EBX, ECX, EDX, ESI, EDI, EBP, and a throwaway ESP).
-    if we don't feed popa 8 chunks of data, it will keep digging into the stack and accidentally eat our EIP, our CS, and our EFLAGS!
-    by planting 8 zeros on the stack, we are just feeding popa empty calories so it gets full. It eats the zeros, leaves the vital iret frame untouched, and the context switch completes perfectly.
-    TRY TO READ ALL COMMENTS BECAUSE IT IS THERE FOR A REASON :|
-    */
-    for (int i=0;i<8;i++) {
-        stack--;
-        *stack=0;
+    kernel_stack--;
+    *kernel_stack = (uint32_t)user_stack; //PLATE 2: User Stack Pointer (ESP)
+    //tells the CPU: "Here is the address of the Ring 3 User Stack."
+
+    kernel_stack--;
+    *kernel_stack = 0x202; //PLATE 3: EFLAGS (Interrupts On)
+    //the '2' in the middle ensures the Interrupt Flag (IF) is 1.
+    //if we don't do this, the program will ignore the hardware timer and freeze the OS.
+
+    kernel_stack--;
+    *kernel_stack = 0x1B; //PLATE 4: User Code Segment (CS)
+    //tells the CPU: "You are now executing code with Ring 3 restrictions."
+
+    kernel_stack--;
+    *kernel_stack = (uint32_t)entry_point; //PLATE 5: Instruction Pointer (EIP)
+    //tells the CPU the exact memory address of `program_A` to start running.
+
+    //our assembly interrupt stub uses the 'popa' instruction to restore CPU registers.
+    // 'popa' blindly grabs the top 8 plates off the stack and shoves them into EAX, EBX, ECX, etc.
+    //because this is a brand new program, those registers don't have any saved data yet.
+    //if we don't put 8 fake plates here, 'popa' will accidentally eat our 5-Plate IRET frame!
+    for (int i=0; i<8; i++) {
+        kernel_stack--;
+        *kernel_stack = 0; //push 8 zeros as "empty calories" for popa to eat.
     }
-    task_t* new_task=(task_t*)kmalloc(sizeof(task_t));
-    new_task->id=next_pid;
-    next_pid++;
-    new_task->esp=(uint32_t)stack;
-    //circular link
-    new_task->next=current_task->next;
-    current_task->next=new_task;
-};
+    //building the pcb
+    task_t* new_task = (task_t*)kmalloc(sizeof(task_t));
+    new_task->id = next_pid++;
+    //we save the exact location of our forged Kernel Stack into the ledger.
+    //when the OS wants to start this program, it will point the CPU at this exact address.
+    new_task->esp = (uint32_t)kernel_stack;
+
+    //assign the memory sandbox (currently sharing the kernel's sandbox)
+    extern page_directory* kernel_directory;
+    new_task->page_dire = kernel_directory;
+    //we insert this new task into our circular linked list so the scheduler can find it.
+    new_task->next = current_task->next;
+    current_task->next = new_task;
+}
