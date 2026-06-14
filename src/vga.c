@@ -1,7 +1,9 @@
 #include <stdint.h>
 #include "include/vga.h"
+
 volatile uint16_t* vga_buff = (uint16_t*)0xb8000; //global pointer to the video memory
 uint16_t vga_index = 0; //global variable to track where the cursor is currently sitting on the screen
+uint16_t vga_limit=0; //precaution for not accidentally overwriting the command prompt
 static const uint8_t default_color = 0x0F; //White text (F) on Black background (0)
 static const uint8_t green_color = 0x0A;
 static const uint8_t red_color = 0x0C;
@@ -14,6 +16,9 @@ static const uint8_t cyan_color = 0x03;
 *standard VGA screen is exactly 80 columns wide and 25 rows tall. 80 x 25 = 2000
 */
 
+void vga_lock_cursor() {
+    vga_limit = vga_index;
+}
 
 void vga_clear_screen() {
     for (int i=0;i<=1999;i++) {
@@ -46,7 +51,14 @@ void vga_print(const char* str) {
 
             vga_buff[vga_index] = colored_char;
             vga_index++;
-        }
+        } oh but maybe somtines that differes too do gotta be carul about everything that happemdn
+        sdcsncknkkcksk
+         ks
+         ndcs
+         nllsc
+         lc,s
+
+
         str++; // Move to the next text character pointer in RAM
         //scroll logic
         //if the cursor has fallen off the bottom of the screen (25 rows * 80 cols = 2000)
@@ -88,9 +100,18 @@ void vga_hex_print(uint32_t num) {
 }
 
 void vga_print_char_color(char c, uint8_t color) {
-    if (c == '\n') {
+    if (c == '\n') { //enter key
         vga_index = (vga_index / 80 + 1) * 80;
-    } else {
+    }
+    else if (c=='\b') {
+        //backspace
+        if (vga_index > vga_limit) {//precautions for out of bounds
+            vga_index--;//go back
+            uint16_t blank_char=(color<<8)|' ';//overwrite prev char with blank
+            vga_buff[vga_index] = blank_char;
+        }
+    }
+    else {
         uint16_t colored_char = (color << 8) | c;
         vga_buff[vga_index] = colored_char;
         vga_index++;
@@ -147,7 +168,16 @@ void vga_print_color(const char* str, uint8_t color) {
     while (*str != '\0') {
         if (*str == '\n') {
             vga_index = (vga_index / 80 + 1) * 80;
-        }else {
+        }
+        else if (*str=='\b') {
+            //backspace
+            if (vga_index > vga_limit) {//precautions for out of bounds
+                vga_index--;//go back
+                uint16_t blank_char=(color<<8)|' ';//overwrite prev char with blank
+                vga_buff[vga_index] = blank_char;
+            }
+        }
+        else {
             uint16_t colored_char=(color<<8)|*str;
             vga_buff[vga_index] = colored_char;
             vga_index++;
