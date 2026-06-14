@@ -14,6 +14,7 @@
 extern uint32_t _kernel_end;
 extern void jump_to_usermode(void (*entry_point)(), uint32_t user_esp);
 extern void tss_flush();
+extern void vga_lock_cursor();
 
 /*
  *In user-space, main() returns an integer (like return 0;) back to the operating system.
@@ -29,31 +30,11 @@ extern void tss_flush();
  * 'mb_info' reads EBX (Pushed 1st, sitting directly underneath EAX as a raw RAM pointer). contains the physical address of GRUB's Memory Map
  */
 
-void program_A() {
+void kernel_shell() {
+    vga_print_color("root@ng-os:~ ",0x03);
+    vga_lock_cursor();
     for (;;) {
-        __asm__ volatile (
-            "mov $1, %%eax\n"     // System Call Number 1 (Print)
-            "mov $'A', %%ebx\n"   // Parameter: The character 'A'
-            "int $0x80\n"         // The Drop into Ring 0
-            : : : "eax", "ebx"
-        );
-
-        int count=5;
-        while (count>1) { count--; }
-        for(volatile uint32_t i=0; i<1000000; i++) {}
-    }
-}
-void program_A_end() {}
-
-void program_B() {
-    for (;;) {
-        __asm__ volatile (
-            "mov $1, %%eax\n"     // System Call Number 1 (Print)
-            "mov $'B', %%ebx\n"   // Parameter: The character 'B'
-            "int $0x80\n"         // The Drop into Ring 0
-            : : : "eax", "ebx"
-        );
-        for(volatile uint32_t i=0; i<1000000; i++) {}
+        __asm__ volatile("hlt");
     }
 }
 
@@ -121,6 +102,8 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
 
     os_greeting("NG-OS :)");
 
+    /* ----> old testing code
+
     uint32_t prog_a_page = (uint32_t)program_A & ~0xFFF;
     map_page(prog_a_page, prog_a_page);
     uint32_t prog_b_page = (uint32_t)program_B & ~0xFFF;
@@ -145,12 +128,13 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
     by using the Bitwise AND (&) operator against the raw memory pointer, we violently
     wipe out the bottom 12 bits of the address. This perfectly rounds the address down
     to the absolute starting boundary of its 4KB physical page.
-    */
+
 
     //5-Plate Ring 3 Stacks for our User Programs
     create_task(program_A); //forges the stack for A (PID 2)
     create_task(program_B); //forges the stack for B (PID 3)
 
+    ---->*/
     extern page_directory* kernel_directory;
     for(int i=0; i<1024; i++) {
         kernel_directory->entries[i] |= 7;
@@ -175,15 +159,9 @@ void kernel_main(uint32_t grub_magic_number, multiboot_info_t* mb_info) {
      *assembly function takes that 0x0, adds 4 to it, and writes the CPU's stack pointer into memory address 0x00000004. Then, it reads the "next" task from address 0x00000008 (which is just random garbage RAM), shoves that garbage into the esp register, pops garbage into the CPU, and Triple Faults.
      */
     __asm__ volatile("sti"); //on interrupts so the CPU can hear the PIT timer
-    /*
-     *A normal program when our main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
-     *which securely cleans up the memory and closes the process. Since we are writing the operating system itself, there is nothing left to return to.
-     *Since our kernel has no host OS to return to, exiting this function would cause a fatal system crash.
-     *To prevent this, we enter an infinite loop that uses the raw assembly "hlt" (Halt) instruction.
-     *This safely puts the CPU into a low-power sleep state instead of spinning at 100% usage and generating heat.
-     *If a hardware interrupt wakes the processor up, the loop immediately forces it back to sleep safely.
-     */
 
+    vga_clear_screen();
+    kernel_shell();
 
     /*
      *A normal program when your main() function finishes, it executes a return statement. This returns control back to the operating system's kernel,
