@@ -7,6 +7,7 @@ extern void timer_stub();
 extern void isr14();
 extern void isr128();
 
+
 idt_entry_t idt[256];
 idt_ptr_t idtp;
 
@@ -35,21 +36,6 @@ typedef struct registers {
     uint32_t eip, cs, eflags, useresp, ss;           // Pushed by the CPU automatically.
 } registers_t;
 
-//the Master Interrupt Handler
-void isr_handler(registers_t* regs) {
-    //if the interrupt was our System Call (128 = 0x80)
-    if (regs->int_no == 128) {
-
-        //system calls use CPU registers to pass parameters!
-        //by Linux convention, EAX holds the "System Call Number"
-        if (regs->eax == 1) {
-            //syscall 1: Print Character
-            //let's assume EBX holds the character we want to print
-            char c = (char)regs->ebx;
-            vga_print_char_color(c, 0x0A); //call our Ring 0 VGA driver legally!
-        }
-    }
-}
 
 // The PIC sits on these hardware ports
 #define PIC1_COMMAND 0x20
