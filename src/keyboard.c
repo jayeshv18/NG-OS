@@ -1,11 +1,12 @@
 #include <stdint.h>
 #include "include/vga.h"
 #include "include/io.h"
+#include "include/shell.h"
+
 
 //physical memory space
 static char shell_buffer[256];
 static int buffer_idx = 0;
-void execute_command(char* input);
 
 // A simple US QWERTY layout map (Lower case only)
 
@@ -71,26 +72,5 @@ void keyboard_handler_main() {
      */
 }
 
-int strcmp(const char *str1, const char *str2) {
-    int i=0;
-    while (str1[i] == str2[i]) {
-        if (str1[i] == '\0') {
-            return 0; //strings ended at the same time
-        }
-        i++;
-    }
-    return str1[i] - str2[i]; //difference when dont match
-}
-void execute_command(char* input) {
-    if (strcmp(input, "clear") == 0) {
-        vga_clear_screen();
-    }
-    else if (strcmp(input, "help") == 0) {
-        vga_print("NG-OS v1.0\nAvailable commands:\nclear\nhelp\n");
-    }
-    else if (strcmp(input, "") == 0) {}
-    else{
-        vga_print("Command not found: ");
-        vga_print(input);
-    }
-}
+
+
