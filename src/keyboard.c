@@ -2,6 +2,11 @@
 #include "include/vga.h"
 #include "include/io.h"
 
+//physical memory space
+static char shell_buffer[256];
+static int buffer_idx = 0;
+void execute_command(char* input);
+
 // A simple US QWERTY layout map (Lower case only)
 
 //we use an array map. Because 0x1E equals 30 in decimal, if we create an array where the 30th item is the letter 'a', we can instantly translate the hardware signal into text!
@@ -21,8 +26,38 @@ void keyboard_handler_main() {
         if (keystroke_hold < 128) {
             char c=kbd_us[keystroke_hold];
             //vga_print function was designed to print strings (arrays of characters), not a single char. WE cannot just pass c to it.
-            char str[2] = {c, '\0'};
-            vga_print(str);
+
+            if (c=='\n') {
+                //user hit Enter. The command is finished terminate the str
+                shell_buffer[buffer_idx] = '\0';
+                //must print the newline BEFORE executing the command.
+                vga_print("\n");
+                //execute
+                execute_command(shell_buffer);
+                buffer_idx = 0; //reset index back to 0 so the next command starts fresh
+                //if the command wasn't "clear", we need to print the prompt.
+                //if it was "clear", vga_clear_screen already resets the cursor to the top
+                //trick is to just print the prompt unconditionally here.
+                //if it was cleared, it prints at the top. If not, it prints below the output.
+                vga_print_color("\nroot@ng-os:~ ", 0x03);
+                vga_lock_cursor();
+            }else if (c=='\b') {
+                if (buffer_idx > 0) { //only if buffer is greater than 0 allowed to backspace
+                    buffer_idx--;
+                    //vga_print takes str pointer with a \0 terminating the str so we have to trick into making a string
+                    char str[2] = {'\b', '\0'};
+                    vga_print(str);
+                }
+            }else if (c!=0) {
+                //prevent buffer overflow, one character for \0
+                if (buffer_idx<255) {
+                    shell_buffer[buffer_idx] = c;
+                    buffer_idx++;
+                    //vga_print takes str pointer with a \0 terminating the str so we have to trick into making a string
+                    char str[2] = {c, '\0'};
+                    vga_print(str);
+                }
+            }
         }
     }
     outb(0x20,0x20); //programmable interrupt controller (PIC) acknowledgement, if not done then the PIC will freeze and never send another keystroke.
@@ -34,4 +69,28 @@ void keyboard_handler_main() {
      *
      * If we forget this single line of code, our custom OS will boot, let us type exactly one letter, and then silently hang until we restart the machine.
      */
+}
+
+int strcmp(const char *str1, const char *str2) {
+    int i=0;
+    while (str1[i] == str2[i]) {
+        if (str1[i] == '\0') {
+            return 0; //strings ended at the same time
+        }
+        i++;
+    }
+    return str1[i] - str2[i]; //difference when dont match
+}
+void execute_command(char* input) {
+    if (strcmp(input, "clear") == 0) {
+        vga_clear_screen();
+    }
+    else if (strcmp(input, "help") == 0) {
+        vga_print("NG-OS v1.0\nAvailable commands:\nclear\nhelp\n");
+    }
+    else if (strcmp(input, "") == 0) {}
+    else{
+        vga_print("Command not found: ");
+        vga_print(input);
+    }
 }
