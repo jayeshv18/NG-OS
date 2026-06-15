@@ -1,5 +1,6 @@
 #include "include/shell.h"
 #include "include/vga.h"
+#include <stdint.h>
 //we define the actual physical array here.
 #define MAX_ARGS 16
 char* current_args[MAX_ARGS];
@@ -60,7 +61,7 @@ void execute_command(char* input) {
         vga_clear_screen();
     }
     else if (strcmp(command, "help") == 0) {
-        vga_print("NG-OS v1.0\nAvailable commands:\nclear\nhelp\necho\n");
+        vga_print("NG-OS v1.0\nAvailable commands:\nclear\nhelp\necho\npeek\n");
     }else if (strcmp(command, "clear") == 0) {}
     else if (strcmp(command, "echo") == 0) {
         //we start looping at 1, because args[0] is the word "echo" itself!
@@ -68,9 +69,59 @@ void execute_command(char* input) {
             vga_print(current_args[i]);
             vga_print(" "); //add the spaces back visually
         }
+    }else if (strcmp(command, "peek") == 0) {
+        if (num_args<2) {
+            vga_print("Usage: peek <hex_address>\n");
+            return;
+        }
+        //convert the text argument to a real integer
+        uint32_t target_address = textohex(current_args[1]);
+        //cast the integer into a 32-bit hardware pointer
+        uint32_t* memory_pointer = (uint32_t*)target_address;
+        //dereference the pointer to grab the physical RAM data
+        uint32_t memory_contents = *memory_pointer;
+        vga_print("Data at ");
+        vga_print(current_args[1]);
+        vga_print(": ");
+        vga_hex_print(memory_contents);
+        vga_print("\n");
     }
     else{
         vga_print("Command not found: ");
         vga_print(command);
     }
+}
+
+//takes a hex string from the terminal, translates it into a raw hardware pointer, and prints out exactly what is sitting in that physical RAM slot.
+uint32_t textohex(const char* hex_str) {
+    uint32_t result = 0;
+    int i = 0;
+    //skip the "0x" if typed it
+    if (hex_str[0] == '0' && (hex_str[1] == 'x' || hex_str[1] == 'X')) {
+        i = 2;
+    }while (hex_str[i] != '\0') {
+        char c = hex_str[i];
+        uint32_t hex_val = 0;
+        if (c >= '0' && c <= '9') {
+            hex_val = c - '0'; //0 hold 48 in ascii, c - '0', the computer replaces those characters with their secret ASCII numbers and subtracts them
+        }
+        else if (c >= 'A' && c <= 'F') {
+            //letter 'A' represents the number 10, 'B' is 11, and so on up to 'F', which is 15
+            //in the ASCII table:'A' is 65, 'B' is 66, 'F' is 70
+            //if c is 'C':'C' is 67 in ASCII. hex_val = 67 - 65 + 10, hex_val = 2 + 10 = 12
+            //the letter 'C' correctly becomes the number 12
+            hex_val = c-'A' + 10;
+        }
+        else if (c >= 'a' && c <= 'f') {
+            hex_val = c-'a' + 10;
+        }
+        else {
+            // invalid character! Just break the loop.
+            break;
+        }
+        //shift the result left by 1 hex digit (4 bits) and add the new value
+        result=(result<<4)|hex_val;
+        i++;
+    }
+    return result;
 }
