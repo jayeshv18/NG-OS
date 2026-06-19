@@ -79,14 +79,12 @@ extern timer_handler_main
 ;inside our C code, that location arrives as the variable current_esp.
 timer_stub:
     pusha;dsave all general-purpose registers
-    ;we need a temporary safe space to hold the stack pointer
-    mov eax, esp
-    push eax ;onto the stack, this goes th=o the C function as the parameter
+    push esp ;onto the stack, this goes th=o the C function as the parameter
     call timer_handler_main ;call our C function
-    ;when C returns, the value waiting at [esp] has been UPDATED by C!
-    pop esp;pull the perfectly safe, C-updated stack pointer directly into ESP!
+    ;when C finishes, the new task's ESP is waiting perfectly inside EAX
+    mov esp, eax;HARDWARE STACK SWITCH! We are now on the new stack.
     ;in standard C convention, functions always return their answers inside the EAX register. Therefore, the brand new stack pointer we asked for is currently sitting in EAX.
-    popad;restore all registers of new task
+    popa;restore all registers of new task
     iret;return from interrupt (crucial!)
 
 ;privelage drop
@@ -107,10 +105,10 @@ mov ebp,esp
 ;EBP is now frozen. It acts as a perfectly still, immovable bookmark for the exact moment our function began.
 ;because EBP never moves, we can use it to mathematically map out the stack perfectly, no matter how many times ESP bounces around later.
 ;because of the C Calling Convention, the stack immediately after mov ebp, esp always looks exactly like this:
-;[ebp]       -> The parent's saved immovable object (which we just pushed).
-;[ebp + 4]   -> The Return Address (where to jump back to when the function finishes, pushed automatically by the CPU's call instruction).
-;[ebp + 8]   -> Parameter 1 (entry_point).
-;[ebp + 12]  -> Parameter 2 (user_esp).
+;[ebp]-> the parent's saved immovable object (which we just pushed).
+;[ebp + 4]   -> the Return Address (where to jump back to when the function finishes, pushed automatically by the CPU's call instruction).
+;[ebp + 8]   -> parameter 1 (entry_point).
+;[ebp + 12]  -> parameter 2 (user_esp).
 ;by using ebp as our immovable object, we can confidently write mov ebx, [ebp+8] to grab our first C parameter, knowing it will always be mathematically sound.
 
 ;grab parameters passed form c
