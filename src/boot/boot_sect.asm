@@ -1,13 +1,9 @@
 
-
 ; [ARCHIVED] Legacy 16-bit bootloader loop kept strictly for revision and reference.
 ; Production builds utilize GRUB for memory management and kernel loading.
 ; Excellent educational blueprint for understanding the low-level x86 handoff.
 
 ; NOTE: This code is currently inactive. It is retained solely as a reference
-
-
-
 
 ;memory is divided into physical chunks called "sectors." A standard sector holds exactly 512 bytes of data.
 ;Sector 0 is the absolute first chunk of data on the entire disk.
@@ -74,7 +70,7 @@ mov bx, 0x9000 ;RAM dest for stage 2
 int 0x13 ;execute the read disk.
 
 main: ;We need to create a label (main: ) and instruct CPU to jump back to that position forever so that it doesnt fall of the 512 and execute garbage.
-jmp 0x9000      ; Jump to the code we just loaded.
+jmp 0x9000;jump to the code we just loaded.
 ;there is important thing to realize, the BIOS will copy the first sector to 0x7c00 and execute then later we have the whole RAM free,
 ;we cant tightly pack it next to each other because the CPU mmu is physically 4kb, as grid.
 
