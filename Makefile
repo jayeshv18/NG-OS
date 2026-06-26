@@ -41,18 +41,18 @@ build/kernel.bin: build/boot.o build/interrupt.o build/kernel.o build/idt.o buil
 
 
 build/ng-os.iso: build/kernel.bin
-	# 1. Create a temporary folder structure that mimics a GRUB boot CD
+	#Create a temporary folder structure that mimics a GRUB boot CD
 	mkdir -p iso/boot/grub
-	# 2. Copy our GRUB configuration text file from the root into the CD layout
+	#Copy our GRUB configuration text file from the root into the CD layout
 	cp grub.cfg iso/boot/grub/grub.cfg
-	# 3. Copy our compiled kernel into the CD layout
+	#Copy our compiled kernel into the CD layout
 	cp build/kernel.bin iso/boot/kernel.bin
-	# 4. Use the xorriso tool to wrap the folder into a bootable .iso file
+	#Use the xorriso tool to wrap the folder into a bootable .iso file
 	grub-mkrescue -o build/ng-os.iso iso
 
 run: build/ng-os.iso
-	# Launch QEMU with a virtual CD-ROM drive instead of a raw hard drive
-	qemu-system-i386 -cdrom build/ng-os.iso -m 2G
+	#Launch QEMU with a virtual CD-ROM drive instead of a raw hard drive
+	qemu-system-i386 -cdrom build/ng-os.iso -m 2G -display curses
 
 clean:
 	rm -rf build/*
