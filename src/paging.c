@@ -1,5 +1,4 @@
 #include "include/paging.h"
-
 #include "include/pmm.h"
 #include "include/vga.h"
 // in this file, we need to create the global variable that will hold our one and only Kernel Page Directory.
@@ -62,12 +61,12 @@ void paging_init() {
         uint32_t phys_addr=i*4096;
 
         // Supervisor Only
-        first_page_table->entries[i] = phys_addr | 3;
+        first_page_table->entries[i] = phys_addr | 7;
     }
 
     //link the Page Table into the Page Directory.
     // CHANGED TO 7: Present (1), Read/Write (1), User (1)
-    kernel_directory->entries[0]=page_table_address | 3; // Also change the directory entry to 7!
+    kernel_directory->entries[0]=page_table_address | 7; // Also change the directory entry to 7!
 
     //fill the Page Table
     for (int i=0;i<1024;i++) {
@@ -75,11 +74,11 @@ void paging_init() {
         // bitwise OR with 3 (Binary: 00000011)
         // bit 0: Present (1)
         // bit 1: Read/Write (1)
-        first_page_table->entries[i] = phys_addr | 3; //single Page Table has exactly 1024 entries (first_page_table->entries[i]).
+        first_page_table->entries[i] = phys_addr | 7; //single Page Table has exactly 1024 entries (first_page_table->entries[i]).
         //each entry covers one 4KB block. 1024 * 4096 = 4,194,304 bytes (Exactly 4 Megabytes).
     }
     //link the Page Table into the Page Directory. We put it in slot [0] because it covers the bottom 4MB of RAM.
-    kernel_directory->entries[0]=page_table_address | 3;
+    kernel_directory->entries[0]=page_table_address | 7;
 
     //we need ti turn on the MMU, which is controlled by CR3 register and it can be turned on using asm.
     vga_print("Flipping MMU Switch.\n");
@@ -142,17 +141,17 @@ uint32_t map_page(uint32_t virtual_address, uint32_t physical_address) {
         for (int i=0;i<1024;i++) { //clear the new Page Table
             new_table->entries[i] =0x02; //Not Present, Read/Write
         }
-        kernel_directory->entries[directory_index]=new_table_phy | 3; //link the brand new Page Table into the Directory bucket
+        kernel_directory->entries[directory_index]=new_table_phy | 7; //link the brand new Page Table into the Directory bucket
         //use | 3 to set Present and Read/Write flags
         uint32_t table_phys_addr = kernel_directory->entries[directory_index] & ~0xFFF; //extract the physical address of the Page Table from the Directory
         //We use '& ~0xFFF' to strip the 12 security flags off the bottom,
         // leaving only the pure physical address.
         page_table* table = (page_table*)table_phys_addr;
         //the target Physical Address into the correct Table slot!
-        table->entries[table_index] = physical_address | 3;
+        table->entries[table_index] = physical_address | 7;
     }
     else {
-        //TABLE ALREADY EXISTS.
+        //TABLE ALREADY EXISTS
         //THE FIX: Upgrade the building's front door (Directory) to User Accessible!
         //we use |= 7 (Bitwise OR-Equals) to keep the original physical address,
         //but forcefully flip the bottom 3 security bits to 1 (Present, R/W, User).
@@ -164,8 +163,14 @@ uint32_t map_page(uint32_t virtual_address, uint32_t physical_address) {
         // Map the physical address (Ring 3 Accessible: | 7)
         table->entries[table_index] = physical_address | 7;
     }
+}
 
-
+//switches the CPU's active memory map to a new Page Directory
+void switch_page_directory(page_directory* dir) {
+    //the CR3 register requires the pure physical address of the directory.
+    //because our kernel heap is currently identity-mapped (Virtual = Physical),
+    //ee can safely just cast the pointer to a 32-bit integer and shove it into CR3.
+    __asm__ volatile("mov %0, %%cr3":: "r"((uint32_t)dir));
 }
 
 
