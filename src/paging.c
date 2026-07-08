@@ -160,7 +160,7 @@ uint32_t map_page(uint32_t virtual_address, uint32_t physical_address) {
         uint32_t table_phys_addr = kernel_directory->entries[directory_index] & ~0xFFF;
         page_table* table = (page_table*)table_phys_addr;
 
-        // Map the physical address (Ring 3 Accessible: | 7)
+        //map the physical address (Ring 3 Accessible: | 7)
         table->entries[table_index] = physical_address | 7;
     }
 }
